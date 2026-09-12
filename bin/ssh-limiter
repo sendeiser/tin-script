@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-limite
+# Demonio de alto rendimiento para supervisión y aplicación estricta de cuotas
+# concurrentes SSH (OpenSSH) y Dropbear con mitigación escalonada (SIGTERM -> SIGKILL).
+# ==============================================================================
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# Configuración y Parámetros del Demonio
+# ------------------------------------------------------------------------------
+CHECK_INTERVAL="${CHECK_INTERVAL:-3}"     # Segundos entre ciclos de inspección
+GRACE_PERIOD="${GRACE_PERIOD:-1.5}"       # Tiempo de gracia entre SIGTERM y SIGKILL
+PASSWD_FILE="${PASSWD_FILE:-/etc/passwd}"
+LOG_PREFIX="[ssh-limiter]"
+
+log_msg() {
+    local level="$1"
+    shift
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "$timestamp $LOG_PREFIX [$level] $*"
+}
+
+# ------------------------------------------------------------------------------
+# Manejo de señales para apagado limpio del demonio
+# ------------------------------------------------------------------------------
+RUNNING=true
+cleanup() {
+    log_msg "INFO" "Recibida señal de terminación. Deteniendo demonio limpiamente..."
+    RUNNING=false
+}
+
+trap cleanup SIGTERM SIGINT SIGHUP
+
+# ------------------------------------------------------------------------------
+# Función para verificar si una cuenta ha expirado
+# ------------------------------------------------------------------------------
+is_account_expired() {
+    local user="$1"
+    if command -v chage >/dev/null 2>&1; then
+        local expiry_raw
+        expiry_raw=$(chage -l "$user" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
+        if [[ -n "$expiry_raw" && "$expiry_raw" != "never" && "$expiry_raw" != "nunca" ]]; then
+            local expiry_epoch
+            expiry_epoch=$(date -d "$expiry_raw" +%s 2>/dev/null || true)
+            if [[ -n "$expiry_epoch" ]]; then
+                local now_epoch
+                now_epoch=$(date +%s)
+                if [[ "$now_epoch" -gt "$expiry_epoch" ]]; then
+                    return 0 # Expirado
+                fi
+            fi
+        fi
+    fi
+    return 1 # No expirado
+}
+
+# ------------------------------------------------------------------------------
+# Función de mitigación escalonada para una lista de PIDs excedentes
+# ------------------------------------------------------------------------------
+terminate_pids_stepped() {
+    local user="$1"
+    local pids_to_kill=("$@")
+    shift # Dejar solo los PIDs en $@ tras extraer el usuario
+    local pids=("${@}")
+
+    if [[ ${#pids[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    # Paso 1: Enviar SIGTERM (15) para cierre controlado
+    local active_targets=()
+    for pid in "${pids[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            log_msg "WARN" "Usuario '$user': Excedente detectado. Enviando SIGTERM (15) a PID $pid"
+            kill -15 "$pid" 2>/dev/null || true
+            active_targets+=("$pid")
+        fi
+    done
+
+    if [[ ${#active_targets[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    # Período de gracia pasivo
+    sleep "$GRACE_PERIOD"
+
+    # Paso 2: Evaluar si los procesos siguen activos y forzar con SIGKILL (9)
+    for pid in "${active_targets[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            log_msg "ALERT" "Usuario '$user': PID $pid no respondió a SIGTERM tras ${GRACE_PERIOD}s. Forzando SIGKILL (9)"
+            kill -9 "$pid" 2>/dev/null || true
+        else
+            log_msg "INFO" "Usuario '$user': PID $pid terminó correctamente con SIGTERM."
+        fi
+    done
+}
+
+# ------------------------------------------------------------------------------
+# Ciclo Principal de Inspección (Bajo impacto de CPU < 1%)
+# ------------------------------------------------------------------------------
+log_msg "INFO" "Demonio ssh-limiter iniciado. Intervalo: ${CHECK_INTERVAL}s, Gracia: ${GRACE_PERIOD}s"
+
+while $RUNNING; do
+    if [[ ! -r "$PASSWD_FILE" ]]; then
+        log_msg "ERROR" "No se puede leer $PASSWD_FILE. Reintentando..."
+        sleep "$CHECK_INTERVAL"
+        continue
+    fi
+
+    # Leer usuarios administrados con cuota LIM:<N> en GECOS
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Salir inmediatamente si se recibió señal de apagado durante la lectura
+        if ! $RUNNING; then break; fi
+
+        if [[ "$line" =~ ^([a-zA-Z0-9_-]+):.*:LIM[:_=-]?([0-9]+) ]]; then
+            username="${BASH_REMATCH[1]}"
+            limit="${BASH_REMATCH[2]}"
+
+            # Inspección directa sin tuberías complejas:
+            # 1. OpenSSH bajo el UID del usuario (procesos de sesión autenticada)
+            ssh_pids=$(pgrep -u "$username" -f "^sshd: $username@" 2>/dev/null || true)
+            # 2. Dropbear bajo el UID del usuario
+            dropbear_pids=$(pgrep -u "$username" -x "dropbear" 2>/dev/null || true)
+
+            # Unificar PIDs activos
+            all_pids=()
+            for p in $ssh_pids $dropbear_pids; do
+                if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
+                    all_pids+=("$p")
+                fi
+            done
+
+            total_active=${#all_pids[@]}
+
+            # Si no tiene conexiones activas, continuar al siguiente usuario
+            if [[ $total_active -eq 0 ]]; then
+                continue
+            fi
+
+            # ------------------------------------------------------------------
+            # Caso 1: Cuenta expirada -> Desconexión total inmediata
+            # ------------------------------------------------------------------
+            if is_account_expired "$username"; then
+                log_msg "ALERT" "Usuario expirado '$username' tiene $total_active conexión(es) activa(s). Procediendo a cierre total."
+                terminate_pids_stepped "$username" "${all_pids[@]}"
+                continue
+            fi
+
+            # ------------------------------------------------------------------
+            # Caso 2: Concurrencia dentro de la cuota permitida
+            # ------------------------------------------------------------------
+            if [[ $total_active -le $limit ]]; then
+                continue
+            fi
+
+            # ------------------------------------------------------------------
+            # Caso 3: Concurrencia excedida -> Mitigación escalonada
+            # ------------------------------------------------------------------
+            surplus_count=$((total_active - limit))
+            log_msg "WARN" "Límite excedido para usuario '$username': $total_active activas vs $limit permitidas (Excedente: $surplus_count)"
+
+            # Obtener lista de PIDs ordenados por tiempo de vida transcurrido (etimes)
+            # ps -o pid=,etimes= -p <pids> --sort=-etimes
+            # --sort=-etimes lista de MAYOR a MENOR tiempo (el más viejo arriba)
+            pids_csv=$(IFS=,; echo "${all_pids[*]}")
+            
+            # Clasificar procesos por etimes descendente
+            ranked_pids=()
+            while read -r r_pid r_etime; do
+                if [[ -n "$r_pid" && "$r_pid" =~ ^[0-9]+$ ]]; then
+                    ranked_pids+=("$r_pid")
+                fi
+            done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=-etimes 2>/dev/null || true)
+
+            # Si ps fallara por alguna razón, respaldar con el orden original
+            if [[ ${#ranked_pids[@]} -eq 0 ]]; then
+                ranked_pids=("${all_pids[@]}")
+            fi
+
+            # Preservar las primeras $limit sesiones más antiguas (índices 0 a limit-1)
+            # Identificar los PIDs excedentes (desde el índice limit en adelante)
+            surplus_pids=()
+            for (( i=limit; i<${#ranked_pids[@]}; i++ )); do
+                surplus_pids+=("${ranked_pids[i]}")
+            done
+
+            # Aplicar mitigación escalonada a los procesos excedentes
+            if [[ ${#surplus_pids[@]} -gt 0 ]]; then
+                terminate_pids_stepped "$username" "${surplus_pids[@]}"
+            fi
+        fi
+    done < "$PASSWD_FILE"
+
+    # Pausa pasiva para mantener el uso de CPU por debajo del 1%
+    sleep "$CHECK_INTERVAL"
+done
+
+log_msg "INFO" "Demonio ssh-limiter finalizado."
+exit 0

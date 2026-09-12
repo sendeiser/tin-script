@@ -1,0 +1,29 @@
+[Unit]
+Description=VPS SSH & Dropbear Connection Limiter Daemon
+Documentation=https://github.com/vps-ssh-limite
+After=network.target ssh.service sshd.service dropbear.service
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ssh-limite
+Restart=always
+RestartSec=5
+KillMode=process
+TimeoutStopSec=10
+
+# Configuración de rendimiento y entorno
+Environment=CHECK_INTERVAL=3
+Environment=GRACE_PERIOD=1.5
+
+# Seguridad y límites de recursos
+LimitNOFILE=65536
+TasksMax=infinity
+
+# Registro directo en systemd-journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ssh-limite
+
+[Install]
+WantedBy=multi-user.target

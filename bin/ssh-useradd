@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-useradd
+# Creador de cuentas de usuario restringidas para túneles SSH y Dropbea
+# con persistencia de límites en GECOS y fecha de expiración automática.
+# ==============================================================================
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# Configuración visual (colores y formato)
+# ------------------------------------------------------------------------------
+if [[ -t 1 ]]; then
+    C_RESET="\033[0m"
+    C_RED="\033[1;31m"
+    C_GREEN="\033[1;32m"
+    C_YELLOW="\033[1;33m"
+    C_CYAN="\033[1;36m"
+    C_BOLD="\033[1m"
+    C_GRAY="\033[0;90m"
+else
+    C_RESET=""
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_CYAN=""
+    C_BOLD=""
+    C_GRAY=""
+fi
+
+show_help() {
+    cat <<EOF
+${C_BOLD}Uso:${C_RESET}
+    ssh-useradd <usuario> <contraseña> <días_validez> <límite_conexiones>
+
+${C_BOLD}Descripción:${C_RESET}
+    Crea una cuenta restringida en el sistema sin acceso a shell (/bin/false)
+    ni directorio /home (/nonexistent), orientada exclusivamente a túneles SSH y
+    Dropbear. Asigna fecha de expiración del sistema y almacena de forma atómica
+    la cuota de conexiones simultáneas en el campo GECOS de /etc/passwd (LIM:<N>).
+
+${C_BOLD}Parámetros:${C_RESET}
+    <usuario>            Nombre del usuario (alfanumérico, 3 a 32 caracteres).
+    <contraseña>         Contraseña de acceso para el usuario.
+    <días_validez>       Días de vigencia de la cuenta a partir de hoy (entero >= 1).
+    <límite_conexiones>  Máximo de conexiones concurrentes permitidas (entero >= 1).
+
+${C_BOLD}Ejemplo:${C_RESET}
+    sudo ssh-useradd juan pass123 30 2
+EOF
+}
+
+# ------------------------------------------------------------------------------
+# Verificaciones previas
+# ------------------------------------------------------------------------------
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+    exit 0
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Este script debe ejecutarse con privilegios de superusuario (root)." >&2
+    exit 1
+fi
+
+if [[ $# -ne 4 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Argumentos insuficientes o inválidos." >&2
+    show_help >&2
+    exit 1
+fi
+
+USERNAME="$1"
+PASSWORD="$2"
+DAYS="$3"
+LIMIT="$4"
+
+# Validación de nombre de usuario (3 a 32 caracteres, letras, números, guion bajo o medio)
+if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9_-]{3,32}$ ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} El nombre de usuario '$USERNAME' es inválido. Debe contener entre 3 y 32 caracteres alfanuméricos." >&2
+    exit 1
+fi
+
+# Validación de contraseña no vacía
+if [[ -z "$PASSWORD" ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} La contraseña no puede estar vacía." >&2
+    exit 1
+fi
+
+# Validación de días
+if [[ ! "$DAYS" =~ ^[0-9]+$ ]] || [[ "$DAYS" -lt 1 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Los días de validez deben ser un número entero mayor o igual a 1." >&2
+    exit 1
+fi
+
+# Validación de límite de conexiones
+if [[ ! "$LIMIT" =~ ^[0-9]+$ ]] || [[ "$LIMIT" -lt 1 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} El límite de conexiones simultáneas debe ser un número entero mayor o igual a 1." >&2
+    exit 1
+fi
+
+# Comprobar si el usuario ya existe en el sistema
+if id "$USERNAME" >/dev/null 2>&1; then
+    echo -e "${C_RED}[ERROR]${C_RESET} El usuario '$USERNAME' ya existe en el sistema." >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# Creación de usuario y asignación de parámetros
+# ------------------------------------------------------------------------------
+# Calcular fecha de expiración en formato ISO (YYYY-MM-DD)
+EXPIRY_DATE=$(date -d "+${DAYS} days" +%Y-%m-%d 2>/dev/null || date -v "+${DAYS}d" +%Y-%m-%d)
+GECOS_VALUE="LIM:${LIMIT}"
+RESTRICTED_SHELL="/bin/false"
+
+# Asegurar que la shell restringida exista en el sistema
+if [[ ! -x "$RESTRICTED_SHELL" ]]; then
+    if [[ -x "/usr/sbin/nologin" ]]; then
+        RESTRICTED_SHELL="/usr/sbin/nologin"
+    else
+        RESTRICTED_SHELL="/bin/false"
+    fi
+fi
+
+# Intentar crear el usuario con el formato solicitado LIM:$LIMIT
+# Si la versión de shadow-utils del sistema rechaza ':' por ser delimitador de /etc/passwd,
+# se utiliza LIM-$LIMIT como fallback transparente 100% compatible.
+GECOS_VALUE="LIM:${LIMIT}"
+if useradd \
+    --no-create-home \
+    --home-dir /nonexistent \
+    --shell "$RESTRICTED_SHELL" \
+    --expiredate "$EXPIRY_DATE" \
+    --comment "$GECOS_VALUE" \
+    "$USERNAME" 2>/dev/null; then
+    RECORDED_GECOS="$GECOS_VALUE"
+else
+    RECORDED_GECOS="LIM-${LIMIT}"
+    useradd \
+        --no-create-home \
+        --home-dir /nonexistent \
+        --shell "$RESTRICTED_SHELL" \
+        --expiredate "$EXPIRY_DATE" \
+        --comment "$RECORDED_GECOS" \
+        "$USERNAME"
+fi
+
+# Asignación segura de contraseña
+echo "${USERNAME}:${PASSWORD}" | chpasswd
+
+# ------------------------------------------------------------------------------
+# Confirmación de salida formateada
+# ------------------------------------------------------------------------------
+echo -e "${C_GREEN}✔ Usuario creado exitosamente${C_RESET}"
+echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Usuario:" "$USERNAME"
+printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Límite simultáneo:" "${LIMIT} conexión(es)"
+printf "  ${C_BOLD}%-22s${C_RESET} %s (%s días)\n" "Fecha de expiración:" "$EXPIRY_DATE" "$DAYS"
+printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Shell asignada:" "$RESTRICTED_SHELL"
+printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Directorio de inicio:" "/nonexistent (Sin /home)"
+printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Registro GECOS:" "$RECORDED_GECOS"
+echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+
+exit 0

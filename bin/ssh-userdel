@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-userdel
+# Revocación inmediata de cuentas de usuario, expulsión forzosa de procesos
+# activos (SSH y Dropbear) y eliminación del sistema.
+# ==============================================================================
+set -euo pipefail
+
+if [[ -t 1 ]]; then
+    C_RESET="\033[0m"
+    C_RED="\033[1;31m"
+    C_GREEN="\033[1;32m"
+    C_YELLOW="\033[1;33m"
+    C_BOLD="\033[1m"
+    C_GRAY="\033[0;90m"
+else
+    C_RESET=""
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_BOLD=""
+    C_GRAY=""
+fi
+
+show_help() {
+    cat <<EOF
+${C_BOLD}Uso:${C_RESET}
+    ssh-userdel <usuario>
+
+${C_BOLD}Descripción:${C_RESET}
+    Revoca la cuenta del usuario especificado, cerrando de forma inmediata
+    y forzosa cualquier proceso y conexión activa (OpenSSH / Dropbear) asociada
+    a su UID antes de eliminar al usuario de /etc/passwd y /etc/shadow.
+
+${C_BOLD}Ejemplo:${C_RESET}
+    sudo ssh-userdel juan
+EOF
+}
+
+# ------------------------------------------------------------------------------
+# Verificaciones previas
+# ------------------------------------------------------------------------------
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+    exit 0
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Este script debe ejecutarse con privilegios de superusuario (root)." >&2
+    exit 1
+fi
+
+if [[ $# -ne 1 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Debe especificar el nombre de usuario a eliminar." >&2
+    show_help >&2
+    exit 1
+fi
+
+USERNAME="$1"
+
+# Comprobar que no se intente eliminar root o cuentas esenciales
+if [[ "$USERNAME" == "root" || "$USERNAME" == "daemon" || "$USERNAME" == "bin" ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} No está permitido eliminar cuentas de sistema críticas ($USERNAME)." >&2
+    exit 1
+fi
+
+# Verificar si el usuario existe
+if ! id "$USERNAME" >/dev/null 2>&1; then
+    echo -e "${C_YELLOW}[ADVERTENCIA]${C_RESET} El usuario '$USERNAME' no existe en el sistema." >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# Terminación forzosa de procesos activos
+# ------------------------------------------------------------------------------
+echo -e "${C_GRAY}Inspeccionando y terminando procesos en ejecución para '${USERNAME}'...${C_RESET}"
+# Se envía SIGKILL inmediato a cualquier proceso del UID del usuario
+pkill -u "$USERNAME" -9 2>/dev/null || true
+
+# Breve espera de sincronización de procesos
+sleep 0.5
+
+# Si aún quedara algún proceso residual, forzar eliminación por PID
+REMAINING_PIDS=$(pgrep -u "$USERNAME" 2>/dev/null || true)
+if [[ -n "$REMAINING_PIDS" ]]; then
+    for pid in $REMAINING_PIDS; do
+        kill -9 "$pid" 2>/dev/null || true
+    done
+fi
+
+# ------------------------------------------------------------------------------
+# Eliminación del usuario del sistema
+# ------------------------------------------------------------------------------
+# userdel -f: Forzar eliminación incluso si todavía existe algún socket o descripto
+userdel -f "$USERNAME"
+
+echo -e "${C_GREEN}✔ Usuario '$USERNAME' y todas sus conexiones fueron eliminados exitosamente.${C_RESET}"
+exit 0
