@@ -98,9 +98,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f /etc/systemd/system/ssh-limiter.service
     systemctl daemon-reload 2>/dev/null || true
     
-    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter menu tin vps; do
+    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update update menu tin vps; do
         rm -f "/usr/local/bin/$b" "/usr/bin/$b"
     done
+    rm -rf /etc/vps-ssh-limiter
     
     log_success "vps-ssh-limiter ha sido desinstalado correctamente del sistema."
     exit 0
@@ -188,7 +189,7 @@ log_success "Shells restringidas autorizadas para autenticación sin apertura de
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -211,12 +212,17 @@ fi
 # Crear enlaces simbólicos globales en /usr/local/bin y /usr/bin para compatibilidad universal con PATH
 ln -sf /usr/local/bin/menu /usr/local/bin/tin
 ln -sf /usr/local/bin/menu /usr/local/bin/vps
+ln -sf /usr/local/bin/ssh-update /usr/local/bin/update
 
-for bin_name in "${BIN_LIST[@]}" tin vps; do
+for bin_name in "${BIN_LIST[@]}" tin vps update; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
-log_success "Binarios y atajos ('menu', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
+# Registrar versión instalada
+mkdir -p /etc/vps-ssh-limiter
+echo "1.3.0" > /etc/vps-ssh-limiter/version
+
+log_success "Binarios y atajos ('menu', 'update', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación del Demonio Systemd
@@ -271,8 +277,9 @@ fi
 # ------------------------------------------------------------------------------
 echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
 echo -e "${C_GREEN}${C_BOLD}✔ ¡INSTALACIÓN COMPLETADA EXITOSAMENTE!${C_RESET}\n"
-echo -e "${C_BOLD}Acceso al Panel Principal Interactivo:${C_RESET}"
-echo -e "  ${C_BOLD}${C_GREEN}menu${C_RESET}  (o  ${C_CYAN}tin${C_RESET}  /  ${C_CYAN}vps${C_RESET})  : Abre el panel interactivo completo estilo Darnyx / ChumoGH"
+echo -e "${C_BOLD}Acceso al Panel y Actualizaciones:${C_RESET}"
+echo -e "  ${C_BOLD}${C_GREEN}menu${C_RESET}   (o ${C_CYAN}tin${C_RESET} / ${C_CYAN}vps${C_RESET})     : Abre el panel interactivo completo"
+echo -e "  ${C_BOLD}${C_YELLOW}update${C_RESET} (o ${C_CYAN}ssh-update${C_RESET})  : Actualiza el script automáticamente a la última versión"
 echo -e ""
 echo -e "${C_BOLD}Comandos CLI directos disponibles:${C_RESET}"
 echo -e "  ${C_CYAN}ssh-useradd <u|p|d|l>${C_RESET}  : Crear usuario túnel restringido"

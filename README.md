@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Systemd](https://img.shields.io/badge/Daemon-Systemd-lightgrey.svg)](https://systemd.io/)
 
-Suite modular, segura y de alto rendimiento diseñada para la administración integral de usuarios SSH y Dropbear en servidores **Debian** y **Ubuntu**, con panel de control interactivo CLI (estilo **Darnyx Script** y **ChumoGH**), control estricto de concurrencia y límites simultáneos por cuenta.
+Suite modular, segura y de alto rendimiento diseñada para la administración integral de usuarios SSH y Dropbear en servidores **Debian** y **Ubuntu**, con panel de control interactivo CLI (estilo **Darnyx Script** y **ChumoGH**), control estricto de concurrencia, límites simultáneos por cuenta y **actualizador automático en un clic**.
 
 Diseñado siguiendo estándares DevOps para entornos de producción, túneles seguros y reenvío de tráfico (port forwarding), garantizando un consumo de CPU inferior al 1% y cero dependencias de bases de datos externas.
 
@@ -14,6 +14,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 ## 📑 Tabla de Contenidos
 
 - [Panel Interactivo Principal (menu / tin / vps)](#-panel-interactivo-principal-menu--tin--vps)
+- [Actualizador Automático en el Menú](#-actualizador-automático-en-el-menú)
 - [Arquitectura y Principios de Diseño](#-arquitectura-y-principios-de-diseño)
 - [Instalación](#-instalación)
   - [Instalación Rápida (Un Solo Comando)](#instalación-rápida-un-solo-comando)
@@ -21,6 +22,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 - [Estructura del Proyecto](#-estructura-del-proyecto)
 - [Referencia de Comandos CLI](#-referencia-de-comandos-cli)
   - [menu / tin / vps](#menu--tin--vps)
+  - [update / ssh-update](#update--ssh-update)
   - [ssh-useradd](#ssh-useradd)
   - [ssh-usermod](#ssh-usermod)
   - [ssh-userlock](#ssh-userlock)
@@ -53,6 +55,7 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     IP Pública: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
+ Versión: [v1.3.0 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  OpenSSH: [ONLINE]   Dropbear: [ONLINE]   Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
@@ -62,9 +65,33 @@ sudo menu
  [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
  [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, Reiniciar SSH/Dropbear)
  [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
- [6] ► ACTUALIZAR / DESINSTALAR SCRIPT
+ [6] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
+ [7] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
  [0] ► SALIR
 ══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 🔄 Actualizador Automático en el Menú
+
+El sistema cuenta con **detección inteligente de versiones**:
+1. Cada vez que abres el menú, consulta en segundo plano la última versión disponible en GitHub.
+2. Si detecta una nueva actualización, la opción **`[6] ► ACTUALIZAR SCRIPT`** se resalta automáticamente con una alerta visual:
+   ```text
+   [6] ► ACTUALIZAR SCRIPT ★ ¡NUEVA ACTUALIZACIÓN vX.Y.Z DISPONIBLE! ★
+   ```
+3. Al presionar **`6`**, el actualizador:
+   - Descarga los archivos y micro-scripts nuevos.
+   - Preserva todas las cuentas y contraseñas de tus usuarios.
+   - Reinicia los servicios correspondientes.
+   - Recarga el menú automáticamente en pantalla sin que tengas que salir.
+
+También puedes actualizar directamente desde la terminal con el comando:
+```bash
+sudo update
+# o también:
+sudo ssh-update
 ```
 
 ---
@@ -99,52 +126,22 @@ Cuando un usuario excede su cuota configurada:
    - Si el proceso no finalizó, se fuerza el cierre inmediato con **`SIGKILL` (9)**.
 4. Si la cuenta ha superado su fecha límite de validez (expiración del sistema), se eliminan el 100% de sus conexiones activas de forma automática.
 
-```
-       [Ciclo ssh-limiter]
-               │
-               ▼
-      Leer /etc/passwd (LIM:<N>)
-               │
-               ▼
-   pgrep (OpenSSH + Dropbear)
-               │
-      ┌────────┴────────┐
-      ▼                 ▼
-Total <= Límite     Total > Límite
-  [OK: Skip]            │
-                        ▼
-            Ordenar por etimes (ps)
-                        │
-            Preservar N más antiguas
-                        │
-            Excedentes: SIGTERM (15)
-                        │
-                  (Espera 1.5s)
-                        │
-         ¿Sigue vivo? ──► SIGKILL (9)
-```
-
 ---
 
 ## 🚀 Instalación
 
 ### Instalación Rápida (Un Solo Comando)
 
-En tu servidor Debian o Ubuntu, ejecuta como superusuario (`root`):
+En tu servidor Debian o Ubuntu, inicia como superusuario (`root`) y ejecuta:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh | bash
-```
-
-O si prefieres utilizar `wget`:
-
-```bash
-wget -qO- https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh | bash
+sudo -i
+curl -fsSL "https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh?v=$(date +%s)" | bash
 ```
 
 ### Instalación Manual
 
-1. **Clonar o descargar el repositorio:**
+1. **Clonar el repositorio:**
    ```bash
    git clone https://github.com/sendeiser/tin-script.git
    cd tin-script
@@ -155,7 +152,7 @@ wget -qO- https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh
    chmod +x install.sh bin/*
    ```
 
-3. **Ejecutar el instalador de producción:**
+3. **Ejecutar el instalador:**
    ```bash
    sudo ./install.sh
    ```
@@ -164,9 +161,9 @@ El instalador se encargará de:
 - Instalar dependencias (`dropbear`, `procps`, `iproute2`, `coreutils`, `passwd`).
 - Configurar Dropbear en los puertos **143**, **90** y **109** en `/etc/default/dropbear`.
 - Registrar `/bin/false` y `/usr/sbin/nologin` en `/etc/shells`.
-- Copiar los micro-scripts a `/usr/local/bin` con permisos `755`.
-- Configurar los atajos globales `menu`, `tin` y `vps`.
-- Instalar, registrar e iniciar el servicio `ssh-limiter.service` en systemd.
+- Copiar los micro-scripts a `/usr/local/bin` y crear enlaces simbólicos en `/usr/bin`.
+- Configurar los atajos globales `menu`, `update`, `tin` y `vps`.
+- Instalar y activar el servicio `ssh-limiter.service` en systemd.
 
 ---
 
@@ -176,6 +173,7 @@ El instalador se encargará de:
 vps-ssh-limiter/
 ├── bin/
 │   ├── menu                # Panel interactivo estilo Darnyx / ChumoGH (atajos: menu, tin, vps)
+│   ├── ssh-update          # CLI: Actualizador automático desde GitHub (atajo: update)
 │   ├── ssh-useradd         # CLI: Creación de usuarios con límite GECOS y expiración
 │   ├── ssh-usermod         # CLI: Renovación de días, modificación de cuota y cambio de clave
 │   ├── ssh-userlock        # CLI: Bloqueo/desbloqueo de cuentas con expulsión de sesiones
@@ -186,6 +184,7 @@ vps-ssh-limiter/
 ├── systemd/
 │   └── ssh-limiter.service # Definición de unidad systemd para supervisión continua
 ├── install.sh              # Instalador y desinstalador automatizado desatendido
+├── version                 # Archivo de control de versiones semver
 ├── LICENSE                 # Licencia MIT
 └── README.md               # Documentación técnica completa
 ```
@@ -194,15 +193,26 @@ vps-ssh-limiter/
 
 ## 💻 Referencia de Comandos CLI
 
-Todos los binarios se instalan en `/usr/local/bin/`, por lo que se encuentran disponibles globalmente en el `PATH` del sistema y pueden ejecutarse directamente o mediante el menú.
+Todos los binarios se instalan en `/usr/local/bin/` y están vinculados en `/usr/bin/`, por lo que se encuentran disponibles globalmente en el `PATH` del sistema.
 
 ### `menu` / `tin` / `vps`
 
-Abre el Panel de Control Interactivo en pantalla completa con telemetría del servidor en tiempo real.
+Abre el Panel de Control Interactivo en pantalla completa con telemetría en tiempo real:
 
 ```bash
 sudo menu
 ```
+
+---
+
+### `update` / `ssh-update`
+
+Verifica si hay una nueva versión disponible en GitHub, descarga las mejoras y actualiza el sistema automáticamente recargando el menú:
+
+```bash
+sudo update
+```
+*(O también `sudo ssh-update`)*
 
 ---
 
@@ -217,19 +227,6 @@ sudo ssh-useradd <usuario> <contraseña> <días_validez> <límite_conexiones>
 #### Ejemplo:
 ```bash
 sudo ssh-useradd juan MiClaveSegura2026 30 2
-```
-
-#### Salida en consola:
-```text
-✔ Usuario creado exitosamente
-────────────────────────────────────────────────────
-  Usuario:               juan
-  Límite simultáneo:     2 conexión(es)
-  Fecha de expiración:   2026-10-12 (30 días)
-  Shell asignada:        /bin/false
-  Directorio de inicio:  /nonexistent (Sin /home)
-  Registro GECOS:        LIM:2
-────────────────────────────────────────────────────
 ```
 
 ---
@@ -264,13 +261,6 @@ Bloquea o desbloquea temporalmente el acceso de un usuario. Al bloquear, se desc
 sudo ssh-userlock <usuario> [lock|unlock|status]
 ```
 
-#### Ejemplos:
-```bash
-sudo ssh-userlock juan lock
-sudo ssh-userlock juan unlock
-sudo ssh-userlock juan status
-```
-
 ---
 
 ### `ssh-killuser`
@@ -295,65 +285,31 @@ Revoca la cuenta de un usuario expulsando de forma inmediata cualquier proceso o
 sudo ssh-userdel <usuario>
 ```
 
-#### Ejemplo:
-```bash
-sudo ssh-userdel juan
-```
-
 ---
 
 ### `ssh-online`
 
-Muestra una tabla con el estado de todos los usuarios registrados, sus conexiones SSH y Dropbear en vivo, límites configurados y estado de expiración.
+Muestra una tabla con el estado de todos los usuarios registrados, sus conexiones SSH y Dropbear en vivo, límites configurados y estado de expiración:
 
 ```bash
 ssh-online
-```
-
-#### Opciones:
-- `--no-color`: Desactiva el resaltado ANSI de la salida.
-- `--json`: Devuelve los datos en formato JSON estructurado (ideal para bots de Telegram, APIs o paneles web).
-
-#### Salida formateada (Tabla):
-```text
-========================================================================================
-   VPS-SSH-LIMITER :: MONITOR DE CONEXIONES EN TIEMPO REAL  (2026-09-12 20:00:00)
-========================================================================================
-USUARIO          SSH    DROPBEAR   TOTAL   LÍMITE EXPIRACIÓN    ESTADO            
-────────────────────────────────────────────────────────────────────────────────────────
-juan             1      1          2       2       2026-10-12     AL LÍMITE
-pedro            1      0          1       1       2026-09-30     AL LÍMITE
-maria            2      2          4       2       2026-11-01     EXCEDIDO (4/2)
-carlos           0      0          0       3       2026-12-15     OFFLINE
-ana              1      0          1       2       2026-08-01     EXPIRADO
-────────────────────────────────────────────────────────────────────────────────────────
-Total Registrados: 5   |   Usuarios Online: 4   |   Conexiones: SSH: 5 | Dropbear: 3 | Total: 8
-========================================================================================
+# O en formato JSON para bots y paneles web:
+ssh-online --json
 ```
 
 ---
 
 ### `ssh-limiter` (Demonio)
 
-Es el servicio en segundo plano que vigila permanentemente los límites. Generalmente es administrado por `systemd`, pero puede ejecutarse directamente para depuración:
+Es el servicio en segundo plano que vigila permanentemente los límites. Es administrado por `systemd`, pero puede ejecutarse directamente para depuración:
 
 ```bash
 sudo ssh-limiter
 ```
 
-#### Variables de entorno configurables:
-- `CHECK_INTERVAL`: Frecuencia de verificación en segundos (predeterminado: `3`).
-- `GRACE_PERIOD`: Tiempo de espera en segundos entre `SIGTERM` y `SIGKILL` (predeterminado: `1.5`).
-
-```bash
-CHECK_INTERVAL=5 GRACE_PERIOD=2 sudo ssh-limiter
-```
-
 ---
 
 ## ⚙ Supervisión con Systemd
-
-El servicio queda configurado para iniciarse automáticamente tras el arranque del sistema (`multi-user.target`) y reiniciarse en caso de anomalías:
 
 ```bash
 # Comprobar estado del servicio
@@ -373,7 +329,7 @@ sudo journalctl -u ssh-limiter -f
 
 ## 🌐 Configuración de Red y Dropbear
 
-El instalador ajusta de forma desatendida `/etc/default/dropbear` para permitir conexiones en múltiples puertos simultáneos:
+El instalador ajusta `/etc/default/dropbear` para permitir conexiones en múltiples puertos simultáneos:
 
 ```bash
 NO_START=0
@@ -381,7 +337,7 @@ DROPBEAR_PORT=143
 DROPBEAR_EXTRA_ARGS="-p 90 -p 109"
 ```
 
-Puedes gestionar los puertos de Dropbear y reiniciar los servicios directamente desde la opción **[4]** del menú interactivo `menu`, o editando `/etc/default/dropbear`.
+Puedes gestionar los puertos de Dropbear y reiniciar los servicios directamente desde la opción **[4]** del menú interactivo `menu`.
 
 ---
 
@@ -399,18 +355,18 @@ Puedes gestionar los puertos de Dropbear y reiniciar los servicios directamente 
 
 ## 🗑 Desinstalación
 
-Para eliminar completamente `vps-ssh-limiter` del sistema, puedes seleccionar la opción correspondiente en el menú `menu` o ejecutar:
+Puedes desinstalar el script desde la opción **[7]** del menú `menu` o ejecutando:
 
 ```bash
 sudo ./install.sh --uninstall
 ```
 
-O si utilizas el script remoto:
+O si utilizas el instalador remoto:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh | bash -s -- --uninstall
+curl -fsSL "https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh?v=$(date +%s)" | bash -s -- --uninstall
 ```
 
-Esto detendrá y eliminará el servicio systemd y retirará los binarios de `/usr/local/bin/`. Los usuarios creados y la configuración de Dropbear se mantendrán intactos.
+Esto detendrá y eliminará el servicio systemd y retirará todos los binarios y atajos. Los usuarios creados y la configuración de Dropbear se mantendrán intactos.
 
 ---
 

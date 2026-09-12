@@ -210,12 +210,29 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
+    local current_ver="1.3.0"
+    if [[ -f /etc/vps-ssh-limiter/version ]]; then
+        current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
+    fi
+
+    local remote_ver=""
+    remote_ver=$(curl -s4 -m 1 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+
+    local ver_badge="${C_GREEN}[v${current_ver} - ACTUALIZADO]${C_RESET}"
+    local opt_6_txt="${C_BOLD}${C_YELLOW}[6]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
+
+    if [[ "$remote_ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$remote_ver" != "$current_ver" ]]; then
+        ver_badge="${C_YELLOW}${C_BOLD}[v${current_ver} -> ¡NUEVA v${remote_ver} DISPONIBLE!]${C_RESET}"
+        opt_6_txt="${C_BOLD}${C_GREEN}[6]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
+    fi
+
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}       VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
     echo -e " ${C_BOLD}S.O.:${C_RESET} ${os_pretty} ($(uname -m))     ${C_BOLD}IP Pública:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
     echo -e " ${C_BOLD}Uptime:${C_RESET} ${uptime_txt}                     ${C_BOLD}Disco /:${C_RESET} ${disk_txt}"
     echo -e " ${C_BOLD}RAM:${C_RESET} ${C_CYAN}${ram_bar}${C_RESET} ${ram_txt}    ${C_BOLD}CPU:${C_RESET} ${cpu_load}"
+    echo -e " ${C_BOLD}Versión:${C_RESET} ${ver_badge}"
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
     echo -e " ${C_BOLD}SERVICIOS:${C_RESET}  OpenSSH: ${s_ssh}   Dropbear: ${s_drop}   Limitador: ${s_lim}"
     echo -e " ${C_BOLD}CUENTAS:${C_RESET}    Total: ${C_BOLD}${u_total}${C_RESET}     |  Online: ${C_GREEN}${u_online}${C_RESET}     |  Expiradas: ${C_RED}${u_exp}${C_RESET}"
@@ -225,7 +242,8 @@ draw_dashboard() {
     echo -e " ${C_BOLD}${C_YELLOW}[3]${C_RESET} ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET} ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Puertos Dropbear, Reiniciar SSH/Dropbear)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET} ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[6]${C_RESET} ${C_BOLD}► ACTUALIZAR / DESINSTALAR SCRIPT${C_RESET}"
+    echo -e " $opt_6_txt"
+    echo -e " ${C_BOLD}${C_YELLOW}[7]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
     echo -e " ${C_BOLD}${C_RED}[0]${C_RESET} ${C_BOLD}► SALIR${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
 }
@@ -262,7 +280,7 @@ menu_users() {
                 else
                     /usr/local/bin/ssh-useradd "$u_name" "$u_pass" "$u_days" "$u_limit" || true
                 fi
-                press_ente
+                press_enter
                 ;;
             2)
                 echo -e "\n${C_BOLD}${C_CYAN}--- RENOVAR / MODIFICAR USUARIO ---${C_RESET}"
@@ -282,7 +300,7 @@ menu_users() {
 
                     /usr/local/bin/ssh-usermod "${cmd_args[@]}" || true
                 fi
-                press_ente
+                press_enter
                 ;;
             3)
                 echo -e "\n${C_BOLD}${C_CYAN}--- BLOQUEAR / DESBLOQUEAR USUARIO ---${C_RESET}"
@@ -299,7 +317,7 @@ menu_users() {
                         /usr/local/bin/ssh-userlock "$u_name" unlock
                     fi
                 fi
-                press_ente
+                press_enter
                 ;;
             4)
                 echo -e "\n${C_BOLD}${C_CYAN}--- EXPULSAR SESIONES ACTIVAS ---${C_RESET}"
@@ -307,7 +325,7 @@ menu_users() {
                 if [[ -n "$u_name" ]]; then
                     /usr/local/bin/ssh-killuser "$u_name" || true
                 fi
-                press_ente
+                press_enter
                 ;;
             5)
                 echo -e "\n${C_BOLD}${C_RED}--- ELIMINAR USUARIO DEL SISTEMA ---${C_RESET}"
@@ -320,7 +338,7 @@ menu_users() {
                         echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
                     fi
                 fi
-                press_ente
+                press_enter
                 ;;
             6)
                 echo -e "\n${C_BOLD}${C_CYAN}--- DETALLES DE CUENTA ---${C_RESET}"
@@ -334,7 +352,7 @@ menu_users() {
                 else
                     echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
                 fi
-                press_ente
+                press_enter
                 ;;
             0)
                 break
@@ -367,7 +385,7 @@ menu_monitor() {
             1)
                 clear
                 /usr/local/bin/ssh-online
-                press_ente
+                press_enter
                 ;;
             2)
                 clear
@@ -386,7 +404,7 @@ menu_monitor() {
             3)
                 echo -e "\n${C_BOLD}${C_CYAN}--- MITIGACIÓN MASIVA DE EXCEDENTES ---${C_RESET}"
                 /usr/local/bin/ssh-killuser --all-exceeded || true
-                press_ente
+                press_enter
                 ;;
             0)
                 break
@@ -421,7 +439,7 @@ menu_limiter() {
             1)
                 echo -e "\n${C_BOLD}Estado actual de ssh-limiter.service:${C_RESET}\n"
                 systemctl status ssh-limiter --no-pager || true
-                press_ente
+                press_enter
                 ;;
             2)
                 systemctl enable --now ssh-limite
@@ -442,7 +460,7 @@ menu_limiter() {
                 clear
                 echo -e "${C_CYAN}Mostrando registros en vivo de ssh-limiter. Presione ${C_BOLD}[Ctrl+C]${C_RESET} para volver.${C_RESET}\n"
                 journalctl -u ssh-limiter -n 30 -f || true
-                press_ente
+                press_enter
                 ;;
             0)
                 break
@@ -476,7 +494,7 @@ menu_ports() {
             1)
                 echo -e "\n${C_BOLD}Puertos en escucha para SSH y Dropbear:${C_RESET}\n"
                 ss -tulpn 2>/dev/null | grep -E 'sshd|dropbear' || netstat -tulpn 2>/dev/null | grep -E 'sshd|dropbear' || echo "No se detectaron puertos en escucha."
-                press_ente
+                press_enter
                 ;;
             2)
                 echo -e "\n${C_BOLD}${C_CYAN}--- CONFIGURAR PUERTOS DE DROPBEAR ---${C_RESET}"
@@ -497,7 +515,7 @@ menu_ports() {
                     systemctl restart dropbea
                     echo -e "${C_GREEN}✔ Puertos de Dropbear actualizados y servicio reiniciado.${C_RESET}"
                 fi
-                press_ente
+                press_enter
                 ;;
             3)
                 systemctl restart dropbea
@@ -542,7 +560,7 @@ menu_tools() {
                 sync
                 echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
                 echo -e "${C_GREEN}✔ Memoria RAM optimizada exitosamente.${C_RESET}"
-                press_ente
+                press_enter
                 ;;
             2)
                 echo -e "\n${C_BOLD}${C_CYAN}--- ACELERADOR DE RED TCP BBR ---${C_RESET}"
@@ -559,7 +577,7 @@ menu_tools() {
                         echo -e "${C_GREEN}✔ TCP BBR activado exitosamente.${C_RESET}"
                     fi
                 fi
-                press_ente
+                press_enter
                 ;;
             3)
                 clear
@@ -568,7 +586,7 @@ menu_tools() {
                 echo ""
                 echo -e "${C_BOLD}Memoria detallada:${C_RESET}"
                 free -h || true
-                press_ente
+                press_enter
                 ;;
             0)
                 break
@@ -582,49 +600,45 @@ menu_tools() {
 }
 
 # ------------------------------------------------------------------------------
-# SUBMENÚ 6: ACTUALIZACIÓN / DESINSTALACIÓN
 # ------------------------------------------------------------------------------
-menu_maintenance() {
-    while true; do
-        clear
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}                 ACTUALIZACIÓN Y MANTENIMIENTO                  ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Actualizar vps-ssh-limiter desde GitHub"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Desinstalar script completamente"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
-        read -p "Seleccione una opción [0-2]: " opt_maint
+# SUBMENÚ 6: ACTUALIZACIÓN AUTOMÁTICA
+# ------------------------------------------------------------------------------
+menu_update() {
+    clear
+    if [[ -x /usr/local/bin/ssh-update ]]; then
+        /usr/local/bin/ssh-update --reload-menu
+    else
+        echo -e "${C_CYAN}Descargando e instalando última versión del repositorio...${C_RESET}"
+        curl -fsSL "https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh?v=$(date +%s)" | bash
+        press_enter
+        exec /usr/local/bin/menu
+    fi
+}
 
-        case "$opt_maint" in
-            1)
-                echo -e "\n${C_CYAN}Descargando e instalando última versión del repositorio...${C_RESET}"
-                curl -fsSL https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh | bash
-                press_ente
-                exec /usr/local/bin/menu
-                ;;
-            2)
-                echo -e "\n${C_BOLD}${C_RED}--- DESINSTALACIÓN DEL SCRIPT ---${C_RESET}"
-                read -p "¿Está completamente seguro de desinstalar vps-ssh-limiter? [s/N]: " conf_del
-                if [[ "$conf_del" =~ ^[sS]$ ]]; then
-                    if [[ -f /usr/local/bin/install.sh ]]; then
-                        /usr/local/bin/install.sh --uninstall
-                    else
-                        curl -fsSL https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh | bash -s -- --uninstall
-                    fi
-                    exit 0
-                fi
-                press_ente
-                ;;
-            0)
-                break
-                ;;
-            *)
-                echo -e "${C_RED}Opción inválida.${C_RESET}"
-                sleep 1
-                ;;
-        esac
-    done
+# ------------------------------------------------------------------------------
+# SUBMENÚ 7: DESINSTALACIÓN
+# ------------------------------------------------------------------------------
+menu_uninstall() {
+    clear
+    echo -e "\n${C_BOLD}${C_RED}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_RED}║                 DESINSTALACIÓN DE VPS-SSH-LIMITER                ║${C_RESET}"
+    echo -e "${C_BOLD}${C_RED}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_YELLOW}Esta acción detendrá el demonio ssh-limiter y eliminará todos los"
+    echo -e "binarios y atajos ('menu', 'tin', 'vps'). Los usuarios existentes"
+    echo -e "en el sistema no serán borrados.${C_RESET}\n"
+
+    read -p "¿Está completamente seguro de desinstalar vps-ssh-limiter? [s/N]: " conf_del
+    if [[ "$conf_del" =~ ^[sS]$ ]]; then
+        if [[ -f /usr/local/bin/install.sh ]]; then
+            /usr/local/bin/install.sh --uninstall
+        else
+            curl -fsSL "https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh?v=$(date +%s)" | bash -s -- --uninstall
+        fi
+        exit 0
+    else
+        echo -e "${C_CYAN}Desinstalación cancelada por el usuario.${C_RESET}"
+        press_enter
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -637,7 +651,7 @@ fi
 
 while true; do
     draw_dashboard
-    read -p " Ingrese una opción [0-6]: " main_opt
+    read -p " Ingrese una opción [0-7]: " main_opt
 
     case "$main_opt" in
         1) menu_users ;;
@@ -645,7 +659,8 @@ while true; do
         3) menu_limiter ;;
         4) menu_ports ;;
         5) menu_tools ;;
-        6) menu_maintenance ;;
+        6) menu_update ;;
+        7) menu_uninstall ;;
         0)
             clear
             echo -e "${C_CYAN}Gracias por utilizar ${C_BOLD}vps-ssh-limiter${C_RESET}${C_CYAN}. ¡Hasta pronto!${C_RESET}\n"
