@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-usermod
+# Modificación atómica de cuentas existentes: renovación de días, cambio de
+# límite GECOS simultáneo y actualización de contraseña.
+# ==============================================================================
+set -euo pipefail
+
+if [[ -t 1 ]]; then
+    C_RESET="\033[0m"
+    C_RED="\033[1;31m"
+    C_GREEN="\033[1;32m"
+    C_YELLOW="\033[1;33m"
+    C_CYAN="\033[1;36m"
+    C_BOLD="\033[1m"
+    C_GRAY="\033[0;90m"
+else
+    C_RESET=""
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_CYAN=""
+    C_BOLD=""
+    C_GRAY=""
+fi
+
+show_help() {
+    cat <<EOF
+${C_BOLD}Uso:${C_RESET}
+    ssh-usermod <usuario> [OPCIONES]
+
+${C_BOLD}Descripción:${C_RESET}
+    Modifica los parámetros de una cuenta de usuario existente sin recrearla.
+    Permite extender o renovar días de validez, cambiar el límite simultáneo
+    en el registro GECOS o modificar la contraseña de acceso.
+
+${C_BOLD}Opciones:${C_RESET}
+    --days <+días>       Añade días adicionales a la expiración actual (o desde hoy si expiró).
+    --limit <límite>     Actualiza la cuota máxima de conexiones simultáneas en GECOS (LIM:<N>).
+    --password <clave>   Establece una nueva contraseña para el usuario.
+    -h, --help           Muestra esta ayuda.
+
+${C_BOLD}Ejemplos:${C_RESET}
+    sudo ssh-usermod juan --days 30
+    sudo ssh-usermod juan --limit 3
+    sudo ssh-usermod juan --password nuevaClave123 --limit 2 --days 15
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+    exit 0
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Este script debe ejecutarse con privilegios de superusuario (root)." >&2
+    exit 1
+fi
+
+if [[ $# -lt 1 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Debe especificar el usuario a modificar." >&2
+    show_help >&2
+    exit 1
+fi
+
+USERNAME="$1"
+shift
+
+if ! id "$USERNAME" >/dev/null 2>&1; then
+    echo -e "${C_RED}[ERROR]${C_RESET} El usuario '$USERNAME' no existe en el sistema." >&2
+    exit 1
+fi
+
+ADD_DAYS=""
+NEW_LIMIT=""
+NEW_PASSWORD=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --days)
+            ADD_DAYS="$2"
+            shift 2
+            ;;
+        --limit)
+            NEW_LIMIT="$2"
+            shift 2
+            ;;
+        --password)
+            NEW_PASSWORD="$2"
+            shift 2
+            ;;
+        *)
+            echo -e "${C_RED}[ERROR]${C_RESET} Opción desconocida: $1" >&2
+            show_help >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$ADD_DAYS" && -z "$NEW_LIMIT" && -z "$NEW_PASSWORD" ]]; then
+    echo -e "${C_YELLOW}[AVISO]${C_RESET} No se especificó ninguna modificación (--days, --limit, --password)." >&2
+    exit 0
+fi
+
+# ------------------------------------------------------------------------------
+# 1. Modificación de Días de Expiración
+# ------------------------------------------------------------------------------
+if [[ -n "$ADD_DAYS" ]]; then
+    if [[ ! "$ADD_DAYS" =~ ^[0-9]+$ ]] || [[ "$ADD_DAYS" -lt 1 ]]; then
+        echo -e "${C_RED}[ERROR]${C_RESET} Los días deben ser un entero positivo mayor o igual a 1." >&2
+        exit 1
+    fi
+
+    # Obtener fecha de expiración actual del usuario
+    CURRENT_EXPIRY_RAW=""
+    if command -v chage >/dev/null 2>&1; then
+        CURRENT_EXPIRY_RAW=$(chage -l "$USERNAME" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
+    fi
+
+    BASE_EPOCH=$(date +%s)
+    if [[ -n "$CURRENT_EXPIRY_RAW" && "$CURRENT_EXPIRY_RAW" != "never" && "$CURRENT_EXPIRY_RAW" != "nunca" ]]; then
+        PARSED_EPOCH=$(date -d "$CURRENT_EXPIRY_RAW" +%s 2>/dev/null || true)
+        if [[ -n "$PARSED_EPOCH" && "$PARSED_EPOCH" -gt "$BASE_EPOCH" ]]; then
+            BASE_EPOCH="$PARSED_EPOCH"
+        fi
+    fi
+
+    NEW_EXPIRY_EPOCH=$(( BASE_EPOCH + (ADD_DAYS * 86400) ))
+    NEW_EXPIRY_DATE=$(date -d "@$NEW_EXPIRY_EPOCH" +%Y-%m-%d)
+
+    chage -E "$NEW_EXPIRY_DATE" "$USERNAME"
+    echo -e "${C_GREEN}✔ Días renovados:${C_RESET} Se agregaron $ADD_DAYS días. Nueva expiración: ${C_BOLD}$NEW_EXPIRY_DATE${C_RESET}"
+fi
+
+# ------------------------------------------------------------------------------
+# 2. Modificación de Cuota GECOS
+# ------------------------------------------------------------------------------
+if [[ -n "$NEW_LIMIT" ]]; then
+    if [[ ! "$NEW_LIMIT" =~ ^[0-9]+$ ]] || [[ "$NEW_LIMIT" -lt 1 ]]; then
+        echo -e "${C_RED}[ERROR]${C_RESET} El límite debe ser un entero positivo mayor o igual a 1." >&2
+        exit 1
+    fi
+
+    GECOS_TARGET="LIM:${NEW_LIMIT}"
+    if usermod -c "$GECOS_TARGET" "$USERNAME" 2>/dev/null; then
+        RECORDED_GECOS="$GECOS_TARGET"
+    else
+        RECORDED_GECOS="LIM-${NEW_LIMIT}"
+        usermod -c "$RECORDED_GECOS" "$USERNAME"
+    fi
+
+    echo -e "${C_GREEN}✔ Cuota actualizada:${C_RESET} Nuevo límite: ${C_BOLD}$NEW_LIMIT conexión(es)${C_RESET} (GECOS: $RECORDED_GECOS)"
+fi
+
+# ------------------------------------------------------------------------------
+# 3. Modificación de Contraseña
+# ------------------------------------------------------------------------------
+if [[ -n "$NEW_PASSWORD" ]]; then
+    echo "${USERNAME}:${NEW_PASSWORD}" | chpasswd
+    echo -e "${C_GREEN}✔ Contraseña actualizada exitosamente.${C_RESET}"
+fi
+
+exit 0

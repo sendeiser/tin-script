@@ -100,8 +100,14 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     
     rm -f /usr/local/bin/ssh-useradd
     rm -f /usr/local/bin/ssh-userdel
+    rm -f /usr/local/bin/ssh-usermod
+    rm -f /usr/local/bin/ssh-userlock
+    rm -f /usr/local/bin/ssh-killuser
     rm -f /usr/local/bin/ssh-online
-    rm -f /usr/local/bin/ssh-limite
+    rm -f /usr/local/bin/ssh-limiter
+    rm -f /usr/local/bin/menu
+    rm -f /usr/local/bin/tin
+    rm -f /usr/local/bin/vps
     
     log_success "vps-ssh-limiter ha sido desinstalado correctamente del sistema."
     exit 0
@@ -184,29 +190,35 @@ done
 log_success "Shells restringidas autorizadas para autenticación sin apertura de sesión interactiva."
 
 # ------------------------------------------------------------------------------
-# 4. Instalación de Binarios CLI en /usr/local/bin
+# 4. Instalación de Binarios CLI y Menú en /usr/local/bin
 # ------------------------------------------------------------------------------
-log_info "4/5 Instalando comandos en /usr/local/bin..."
+log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter menu)
 
 # Si se ejecuta desde el repositorio local
 if [[ -d "$SCRIPT_DIR/bin" ]]; then
-    install -m 755 "$SCRIPT_DIR/bin/ssh-useradd" /usr/local/bin/ssh-useradd
-    install -m 755 "$SCRIPT_DIR/bin/ssh-userdel" /usr/local/bin/ssh-userdel
-    install -m 755 "$SCRIPT_DIR/bin/ssh-online"  /usr/local/bin/ssh-online
-    install -m 755 "$SCRIPT_DIR/bin/ssh-limiter" /usr/local/bin/ssh-limite
+    for bin_name in "${BIN_LIST[@]}"; do
+        if [[ -f "$SCRIPT_DIR/bin/${bin_name}" ]]; then
+            install -m 755 "$SCRIPT_DIR/bin/${bin_name}" "/usr/local/bin/${bin_name}"
+        fi
+    done
 else
     # Soporte para instalación directa vía curl | bash desde GitHub
     BASE_URL="https://raw.githubusercontent.com/sendeiser/tin-script/main"
-    log_info "Descargando micro-scripts directamente desde el repositorio..."
-    for bin_name in ssh-useradd ssh-userdel ssh-online ssh-limiter; do
+    log_info "Descargando scripts y panel interactivo desde el repositorio..."
+    for bin_name in "${BIN_LIST[@]}"; do
         curl -fsSL "${BASE_URL}/bin/${bin_name}" -o "/usr/local/bin/${bin_name}"
         chmod 755 "/usr/local/bin/${bin_name}"
     done
 fi
 
-log_success "Binarios instalados con permisos 755 en /usr/local/bin/."
+# Crear enlaces simbólicos globales para acceso rápido al menú
+ln -sf /usr/local/bin/menu /usr/local/bin/tin
+ln -sf /usr/local/bin/menu /usr/local/bin/vps
+
+log_success "Binarios y atajos ('menu', 'tin', 'vps') instalados en /usr/local/bin/."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación del Demonio Systemd
@@ -220,7 +232,7 @@ else
     cat > "$SERVICE_DST" <<'EOF'
 [Unit]
 Description=VPS SSH & Dropbear Connection Limiter Daemon
-Documentation=https://github.com/vps-ssh-limite
+Documentation=https://github.com/sendeiser/tin-script
 After=network.target ssh.service sshd.service dropbear.service
 Wants=network.target
 
@@ -261,15 +273,20 @@ fi
 # ------------------------------------------------------------------------------
 echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
 echo -e "${C_GREEN}${C_BOLD}✔ ¡INSTALACIÓN COMPLETADA EXITOSAMENTE!${C_RESET}\n"
-echo -e "${C_BOLD}Comandos CLI disponibles en el sistema:${C_RESET}"
-echo -e "  ${C_CYAN}ssh-useradd <user> <pass> <días> <límite>${C_RESET} : Crear usuario túnel seguro"
-echo -e "  ${C_CYAN}ssh-userdel <user>${C_RESET}                       : Revocar y desconectar usuario"
-echo -e "  ${C_CYAN}ssh-online${C_RESET}                               : Monitor de conexiones activas en tiempo real"
-echo -e "  ${C_CYAN}ssh-online --json${C_RESET}                        : Salida estructurada para APIs o bots"
+echo -e "${C_BOLD}Acceso al Panel Principal Interactivo:${C_RESET}"
+echo -e "  ${C_BOLD}${C_GREEN}menu${C_RESET}  (o  ${C_CYAN}tin${C_RESET}  /  ${C_CYAN}vps${C_RESET})  : Abre el panel interactivo completo estilo Darnyx / ChumoGH"
 echo -e ""
-echo -e "${C_BOLD}Gestión del Demonio:${C_RESET}"
-echo -e "  ${C_GRAY}systemctl status ssh-limiter${C_RESET}             : Ver estado de ejecución"
-echo -e "  ${C_GRAY}journalctl -u ssh-limiter -f${C_RESET}             : Registro de eventos en vivo"
+echo -e "${C_BOLD}Comandos CLI directos disponibles:${C_RESET}"
+echo -e "  ${C_CYAN}ssh-useradd <u|p|d|l>${C_RESET}  : Crear usuario túnel restringido"
+echo -e "  ${C_CYAN}ssh-usermod <u|opciones>${C_RESET}: Renovar días, límite o contraseña"
+echo -e "  ${C_CYAN}ssh-userlock <u|lock|unlock>${C_RESET}: Bloquear o desbloquear cuenta"
+echo -e "  ${C_CYAN}ssh-killuser <u|--all-exceeded>${C_RESET}: Desconectar sesiones activas"
+echo -e "  ${C_CYAN}ssh-userdel <usuario>${C_RESET}      : Revocar y eliminar usuario"
+echo -e "  ${C_CYAN}ssh-online${C_RESET}             : Monitor de conexiones en tiempo real (--json para APIs)"
+echo -e ""
+echo -e "${C_BOLD}Supervisión del Demonio:${C_RESET}"
+echo -e "  ${C_GRAY}systemctl status ssh-limiter${C_RESET}   : Estado del servicio"
+echo -e "  ${C_GRAY}journalctl -u ssh-limiter -f${C_RESET}   : Registros de mitigación en vivo"
 echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
 
 exit 0

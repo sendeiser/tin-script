@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Systemd](https://img.shields.io/badge/Daemon-Systemd-lightgrey.svg)](https://systemd.io/)
 
-Sistema modular, seguro y de alto rendimiento diseñado para la administración de usuarios SSH y Dropbear en servidores **Debian** y **Ubuntu**, con control estricto de concurrencia y límites simultáneos por cuenta.
+Suite modular, segura y de alto rendimiento diseñada para la administración integral de usuarios SSH y Dropbear en servidores **Debian** y **Ubuntu**, con panel de control interactivo CLI (estilo **Darnyx Script** y **ChumoGH**), control estricto de concurrencia y límites simultáneos por cuenta.
 
 Diseñado siguiendo estándares DevOps para entornos de producción, túneles seguros y reenvío de tráfico (port forwarding), garantizando un consumo de CPU inferior al 1% y cero dependencias de bases de datos externas.
 
@@ -13,21 +13,59 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 
 ## 📑 Tabla de Contenidos
 
+- [Panel Interactivo Principal (menu / tin / vps)](#-panel-interactivo-principal-menu--tin--vps)
 - [Arquitectura y Principios de Diseño](#-arquitectura-y-principios-de-diseño)
 - [Instalación](#-instalación)
   - [Instalación Rápida (Un Solo Comando)](#instalación-rápida-un-solo-comando)
   - [Instalación Manual](#instalación-manual)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
 - [Referencia de Comandos CLI](#-referencia-de-comandos-cli)
-  - [1. ssh-useradd](#1-ssh-useradd)
-  - [2. ssh-userdel](#2-ssh-userdel)
-  - [3. ssh-online](#3-ssh-online)
-  - [4. ssh-limiter (Demonio)](#4-ssh-limiter-demonio)
+  - [menu / tin / vps](#menu--tin--vps)
+  - [ssh-useradd](#ssh-useradd)
+  - [ssh-usermod](#ssh-usermod)
+  - [ssh-userlock](#ssh-userlock)
+  - [ssh-killuser](#ssh-killuser)
+  - [ssh-userdel](#ssh-userdel)
+  - [ssh-online](#ssh-online)
+  - [ssh-limiter (Demonio)](#ssh-limiter-demonio)
 - [Supervisión con Systemd](#-supervisión-con-systemd)
 - [Configuración de Red y Dropbear](#-configuración-de-red-y-dropbear)
 - [Rendimiento y Consumo de Recursos](#-rendimiento-y-consumo-de-recursos)
 - [Desinstalación](#-desinstalación)
 - [Licencia](#-licencia)
+
+---
+
+## 🖥 Panel Interactivo Principal (`menu` / `tin` / `vps`)
+
+Para abrir el panel de control interactivo en pantalla completa, simplemente ejecuta en tu terminal:
+
+```bash
+sudo menu
+```
+*(También puedes usar los atajos `sudo tin` o `sudo vps`)*
+
+### Vista Previa del Dashboard:
+```text
+╔══════════════════════════════════════════════════════════════════════════════╗
+║        VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ S.O.: Ubuntu 22.04 LTS (x86_64)     IP Pública: 198.51.100.24
+ Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
+ RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
+──────────────────────────────────────────────────────────────────────────────
+ SERVICIOS:  OpenSSH: [ONLINE]   Dropbear: [ONLINE]   Limitador: [ONLINE]
+ CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
+══════════════════════════════════════════════════════════════════════════════
+ [1] ► GESTIÓN DE USUARIOS    (Crear, Renovar, Modificar, Bloquear, Eliminar)
+ [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Modo dinámico en tiempo real)
+ [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
+ [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, Reiniciar SSH/Dropbear)
+ [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
+ [6] ► ACTUALIZAR / DESINSTALAR SCRIPT
+ [0] ► SALIR
+══════════════════════════════════════════════════════════════════════════════
+```
 
 ---
 
@@ -127,6 +165,7 @@ El instalador se encargará de:
 - Configurar Dropbear en los puertos **143**, **90** y **109** en `/etc/default/dropbear`.
 - Registrar `/bin/false` y `/usr/sbin/nologin` en `/etc/shells`.
 - Copiar los micro-scripts a `/usr/local/bin` con permisos `755`.
+- Configurar los atajos globales `menu`, `tin` y `vps`.
 - Instalar, registrar e iniciar el servicio `ssh-limiter.service` en systemd.
 
 ---
@@ -136,7 +175,11 @@ El instalador se encargará de:
 ```
 vps-ssh-limiter/
 ├── bin/
+│   ├── menu                # Panel interactivo estilo Darnyx / ChumoGH (atajos: menu, tin, vps)
 │   ├── ssh-useradd         # CLI: Creación de usuarios con límite GECOS y expiración
+│   ├── ssh-usermod         # CLI: Renovación de días, modificación de cuota y cambio de clave
+│   ├── ssh-userlock        # CLI: Bloqueo/desbloqueo de cuentas con expulsión de sesiones
+│   ├── ssh-killuser        # CLI: Desconexión forzosa de sesiones por usuario o masiva
 │   ├── ssh-userdel         # CLI: Revocación forzosa y expulsión inmediata de procesos
 │   ├── ssh-online          # CLI: Monitor en tiempo real con tabla formateada y JSON
 │   └── ssh-limiter         # Demonio de monitoreo y mitigación escalonada
@@ -151,21 +194,25 @@ vps-ssh-limiter/
 
 ## 💻 Referencia de Comandos CLI
 
-Todos los binarios se instalan en `/usr/local/bin/`, por lo que se encuentran disponibles globalmente en el `PATH` del sistema.
+Todos los binarios se instalan en `/usr/local/bin/`, por lo que se encuentran disponibles globalmente en el `PATH` del sistema y pueden ejecutarse directamente o mediante el menú.
 
-### 1. `ssh-useradd`
+### `menu` / `tin` / `vps`
+
+Abre el Panel de Control Interactivo en pantalla completa con telemetría del servidor en tiempo real.
+
+```bash
+sudo menu
+```
+
+---
+
+### `ssh-useradd`
 
 Crea una cuenta segura para túneles con límite de conexiones y días de vigencia:
 
 ```bash
 sudo ssh-useradd <usuario> <contraseña> <días_validez> <límite_conexiones>
 ```
-
-#### Parámetros:
-- `<usuario>`: Nombre alfanumérico (3 a 32 caracteres).
-- `<contraseña>`: Clave de acceso del usuario.
-- `<días_validez>`: Cantidad de días de vigencia de la cuenta a partir de hoy.
-- `<límite_conexiones>`: Cantidad máxima de conexiones simultáneas permitidas (entero >= 1).
 
 #### Ejemplo:
 ```bash
@@ -187,7 +234,60 @@ sudo ssh-useradd juan MiClaveSegura2026 30 2
 
 ---
 
-### 2. `ssh-userdel`
+### `ssh-usermod`
+
+Modifica los parámetros de una cuenta existente sin recrearla:
+
+```bash
+sudo ssh-usermod <usuario> [--days <+días>] [--limit <límite>] [--password <clave>]
+```
+
+#### Ejemplos:
+```bash
+# Renovar 30 días adicionales
+sudo ssh-usermod juan --days 30
+
+# Cambiar límite a 3 conexiones concurrentes
+sudo ssh-usermod juan --limit 3
+
+# Actualizar contraseña y añadir 15 días
+sudo ssh-usermod juan --password nuevaClave99 --days 15
+```
+
+---
+
+### `ssh-userlock`
+
+Bloquea o desbloquea temporalmente el acceso de un usuario. Al bloquear, se desconectan todas sus sesiones activas:
+
+```bash
+sudo ssh-userlock <usuario> [lock|unlock|status]
+```
+
+#### Ejemplos:
+```bash
+sudo ssh-userlock juan lock
+sudo ssh-userlock juan unlock
+sudo ssh-userlock juan status
+```
+
+---
+
+### `ssh-killuser`
+
+Desconecta inmediatamente todas las sesiones de un usuario sin borrar su cuenta, o realiza una mitigación masiva de conexiones excedentes:
+
+```bash
+# Desconectar un usuario específico
+sudo ssh-killuser juan
+
+# Desconectar todas las conexiones excedentes en el servidor
+sudo ssh-killuser --all-exceeded
+```
+
+---
+
+### `ssh-userdel`
 
 Revoca la cuenta de un usuario expulsando de forma inmediata cualquier proceso o conexión activa antes de borrarlo:
 
@@ -200,15 +300,9 @@ sudo ssh-userdel <usuario>
 sudo ssh-userdel juan
 ```
 
-#### Salida en consola:
-```text
-Inspeccionando y terminando procesos en ejecución para 'juan'...
-✔ Usuario 'juan' y todas sus conexiones fueron eliminados exitosamente.
-```
-
 ---
 
-### 3. `ssh-online`
+### `ssh-online`
 
 Muestra una tabla con el estado de todos los usuarios registrados, sus conexiones SSH y Dropbear en vivo, límites configurados y estado de expiración.
 
@@ -237,39 +331,9 @@ Total Registrados: 5   |   Usuarios Online: 4   |   Conexiones: SSH: 5 | Dropbea
 ========================================================================================
 ```
 
-#### Salida JSON estructurada (`--json`):
-```json
-{
-  "total_managed": 2,
-  "timestamp": "2026-09-12T20:00:00-03:00",
-  "users": [
-    {
-      "username": "juan",
-      "ssh": 1,
-      "dropbear": 1,
-      "total": 2,
-      "limit": 2,
-      "expiration": "2026-10-12",
-      "expired": false,
-      "status": "AL_LIMITE"
-    },
-    {
-      "username": "carlos",
-      "ssh": 0,
-      "dropbear": 0,
-      "total": 0,
-      "limit": 3,
-      "expiration": "2026-12-15",
-      "expired": false,
-      "status": "OFFLINE"
-    }
-  ]
-}
-```
-
 ---
 
-### 4. `ssh-limiter` (Demonio)
+### `ssh-limiter` (Demonio)
 
 Es el servicio en segundo plano que vigila permanentemente los límites. Generalmente es administrado por `systemd`, pero puede ejecutarse directamente para depuración:
 
@@ -281,7 +345,6 @@ sudo ssh-limiter
 - `CHECK_INTERVAL`: Frecuencia de verificación en segundos (predeterminado: `3`).
 - `GRACE_PERIOD`: Tiempo de espera en segundos entre `SIGTERM` y `SIGKILL` (predeterminado: `1.5`).
 
-Ejemplo de ejecución con intervalo de 5 segundos:
 ```bash
 CHECK_INTERVAL=5 GRACE_PERIOD=2 sudo ssh-limiter
 ```
@@ -318,19 +381,7 @@ DROPBEAR_PORT=143
 DROPBEAR_EXTRA_ARGS="-p 90 -p 109"
 ```
 
-Si deseas añadir más puertos a Dropbear (por ejemplo, el puerto `443` para tunneling SSL/TLS o `80` para HTTP):
-1. Edita el archivo:
-   ```bash
-   sudo nano /etc/default/dropbear
-   ```
-2. Modifica la variable de argumentos adicionales:
-   ```bash
-   DROPBEAR_EXTRA_ARGS="-p 90 -p 109 -p 443 -p 80"
-   ```
-3. Reinicia el servicio:
-   ```bash
-   sudo systemctl restart dropbear
-   ```
+Puedes gestionar los puertos de Dropbear y reiniciar los servicios directamente desde la opción **[4]** del menú interactivo `menu`, o editando `/etc/default/dropbear`.
 
 ---
 
@@ -348,7 +399,7 @@ Si deseas añadir más puertos a Dropbear (por ejemplo, el puerto `443` para tun
 
 ## 🗑 Desinstalación
 
-Para eliminar completamente `vps-ssh-limiter` del sistema, ejecuta el desinstalador:
+Para eliminar completamente `vps-ssh-limiter` del sistema, puedes seleccionar la opción correspondiente en el menú `menu` o ejecutar:
 
 ```bash
 sudo ./install.sh --uninstall
