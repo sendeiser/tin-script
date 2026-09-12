@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# vps-ssh-limiter: bin/ssh-killuse
+# vps-ssh-limiter: bin/ssh-killuser
 # Cierre forzoso de conexiones activas por usuario o mitigación masiva de excedentes.
 # ==============================================================================
 set -euo pipefail

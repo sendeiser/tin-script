@@ -5,7 +5,7 @@
 # ==============================================================================
 set -euo pipefail
 
-CURRENT_VERSION="1.3.0"
+CURRENT_VERSION="1.3.1"
 VERSION_FILE="/etc/vps-ssh-limiter/version"
 if [[ -f "$VERSION_FILE" ]]; then
     CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
@@ -75,16 +75,18 @@ fi
 
 if [[ "$CURRENT_VERSION" == "$REMOTE_VERSION" && "$FORCE_UPDATE" != true ]]; then
     echo -e "\n${C_GREEN}✔ Ya cuentas con la versión más reciente (v${CURRENT_VERSION}).${C_RESET}"
-    read -p "¿Deseas forzar la reinstalación de todos modos? [s/N]: " force_ans
-    if [[ ! "$force_ans" =~ ^[sS]$ ]]; then
+    force_ans=""
+    read -r -p "¿Deseas forzar la reinstalación de todos modos? [s/N]: " force_ans || true
+    if [[ ! "${force_ans:-}" =~ ^[sS]$ ]]; then
         echo -e "${C_GRAY}Operación finalizada sin cambios.${C_RESET}\n"
         exit 0
     fi
 elif [[ "$CURRENT_VERSION" != "$REMOTE_VERSION" ]]; then
     echo -e "\n${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN DISPONIBLE: v${REMOTE_VERSION}! ★${C_RESET}"
     if [[ "$FORCE_UPDATE" != true ]]; then
-        read -p "¿Deseas instalar la nueva versión ahora? [S/n]: " update_ans
-        if [[ "$update_ans" =~ ^[nN]$ ]]; then
+        update_ans=""
+        read -r -p "¿Deseas instalar la nueva versión ahora? [S/n]: " update_ans || true
+        if [[ "${update_ans:-}" =~ ^[nN]$ ]]; then
             echo -e "${C_YELLOW}Actualización pospuesta por el usuario.${C_RESET}\n"
             exit 0
         fi

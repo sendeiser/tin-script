@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# vps-ssh-limiter: bin/ssh-limite
+# vps-ssh-limiter: bin/ssh-limiter
 # Demonio de alto rendimiento para supervisión y aplicación estricta de cuotas
 # concurrentes SSH (OpenSSH) y Dropbear con mitigación escalonada (SIGTERM -> SIGKILL).
 # ==============================================================================

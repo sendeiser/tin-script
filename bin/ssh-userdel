@@ -91,7 +91,7 @@ fi
 # ------------------------------------------------------------------------------
 # Eliminación del usuario del sistema
 # ------------------------------------------------------------------------------
-# userdel -f: Forzar eliminación incluso si todavía existe algún socket o descripto
+# userdel -f: Forzar eliminación incluso si todavía existe algún socket o descriptor
 userdel -f "$USERNAME"
 
 echo -e "${C_GREEN}✔ Usuario '$USERNAME' y todas sus conexiones fueron eliminados exitosamente.${C_RESET}"

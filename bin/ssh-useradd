@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # vps-ssh-limiter: bin/ssh-useradd
-# Creador de cuentas de usuario restringidas para túneles SSH y Dropbea
+# Creador de cuentas de usuario restringidas para túneles SSH y Dropbear
 # con persistencia de límites en GECOS y fecha de expiración automática.
 # ==============================================================================
 set -euo pipefail

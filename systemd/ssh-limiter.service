@@ -1,12 +1,12 @@
 [Unit]
 Description=VPS SSH & Dropbear Connection Limiter Daemon
-Documentation=https://github.com/vps-ssh-limite
+Documentation=https://github.com/sendeiser/tin-script
 After=network.target ssh.service sshd.service dropbear.service
 Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ssh-limite
+ExecStart=/usr/local/bin/ssh-limiter
 Restart=always
 RestartSec=5
 KillMode=process
@@ -23,7 +23,7 @@ TasksMax=infinity
 # Registro directo en systemd-journald
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ssh-limite
+SyslogIdentifier=ssh-limiter
 
 [Install]
 WantedBy=multi-user.target

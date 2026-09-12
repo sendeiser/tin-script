@@ -151,9 +151,9 @@ if [[ -f "$DROPBEAR_DEFAULT" ]]; then
     cp "$DROPBEAR_DEFAULT" "${DROPBEAR_DEFAULT}.bak.$(date +%s)"
 fi
 
-# Escribir configuración estricta de Dropbea
+# Escribir configuración estricta de Dropbear
 cat > "$DROPBEAR_DEFAULT" <<'EOF'
-# Configuración generada automáticamente por vps-ssh-limite
+# Configuración generada automáticamente por vps-ssh-limiter
 NO_START=0
 DROPBEAR_PORT=143
 DROPBEAR_EXTRA_ARGS="-p 90 -p 109"
@@ -161,7 +161,7 @@ DROPBEAR_BANNER=""
 DROPBEAR_RECEIVE_WINDOW=65536
 EOF
 
-# Habilitar y reiniciar Dropbea
+# Habilitar y reiniciar Dropbear
 log_info "Reiniciando Dropbear para aplicar nuevos puertos..."
 systemctl enable dropbear 2>/dev/null || true
 systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
@@ -220,7 +220,7 @@ done
 
 # Registrar versión instalada
 mkdir -p /etc/vps-ssh-limiter
-echo "1.3.0" > /etc/vps-ssh-limiter/version
+echo "1.3.1" > /etc/vps-ssh-limiter/version
 
 log_success "Binarios y atajos ('menu', 'update', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
 
@@ -242,7 +242,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ssh-limite
+ExecStart=/usr/local/bin/ssh-limiter
 Restart=always
 RestartSec=5
 KillMode=process
@@ -253,7 +253,7 @@ LimitNOFILE=65536
 TasksMax=infinity
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ssh-limite
+SyslogIdentifier=ssh-limiter
 
 [Install]
 WantedBy=multi-user.target
