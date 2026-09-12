@@ -98,16 +98,9 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f /etc/systemd/system/ssh-limiter.service
     systemctl daemon-reload 2>/dev/null || true
     
-    rm -f /usr/local/bin/ssh-useradd
-    rm -f /usr/local/bin/ssh-userdel
-    rm -f /usr/local/bin/ssh-usermod
-    rm -f /usr/local/bin/ssh-userlock
-    rm -f /usr/local/bin/ssh-killuser
-    rm -f /usr/local/bin/ssh-online
-    rm -f /usr/local/bin/ssh-limiter
-    rm -f /usr/local/bin/menu
-    rm -f /usr/local/bin/tin
-    rm -f /usr/local/bin/vps
+    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter menu tin vps; do
+        rm -f "/usr/local/bin/$b" "/usr/bin/$b"
+    done
     
     log_success "vps-ssh-limiter ha sido desinstalado correctamente del sistema."
     exit 0
@@ -197,28 +190,33 @@ log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter menu)
 
-# Si se ejecuta desde el repositorio local
-if [[ -d "$SCRIPT_DIR/bin" ]]; then
+# Si se ejecuta desde un archivo de script local real que contiene bin/menu
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
     for bin_name in "${BIN_LIST[@]}"; do
         if [[ -f "$SCRIPT_DIR/bin/${bin_name}" ]]; then
             install -m 755 "$SCRIPT_DIR/bin/${bin_name}" "/usr/local/bin/${bin_name}"
         fi
     done
 else
-    # Soporte para instalación directa vía curl | bash desde GitHub
+    # Descarga directa vía GitHub con cache-busting para evitar cachés de CDN
     BASE_URL="https://raw.githubusercontent.com/sendeiser/tin-script/main"
-    log_info "Descargando scripts y panel interactivo desde el repositorio..."
+    TIMESTAMP=$(date +%s)
+    log_info "Descargando suite completa desde GitHub..."
     for bin_name in "${BIN_LIST[@]}"; do
-        curl -fsSL "${BASE_URL}/bin/${bin_name}" -o "/usr/local/bin/${bin_name}"
+        curl -fsSL "${BASE_URL}/bin/${bin_name}?v=${TIMESTAMP}" -o "/usr/local/bin/${bin_name}"
         chmod 755 "/usr/local/bin/${bin_name}"
     done
 fi
 
-# Crear enlaces simbólicos globales para acceso rápido al menú
+# Crear enlaces simbólicos globales en /usr/local/bin y /usr/bin para compatibilidad universal con PATH
 ln -sf /usr/local/bin/menu /usr/local/bin/tin
 ln -sf /usr/local/bin/menu /usr/local/bin/vps
 
-log_success "Binarios y atajos ('menu', 'tin', 'vps') instalados en /usr/local/bin/."
+for bin_name in "${BIN_LIST[@]}" tin vps; do
+    ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
+done
+
+log_success "Binarios y atajos ('menu', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación del Demonio Systemd
