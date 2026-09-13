@@ -207,6 +207,7 @@ load_all_user_connections() {
 # ------------------------------------------------------------------------------
 log_msg "INFO" "Demonio ssh-limiter iniciado. Intervalo: ${CHECK_INTERVAL}s, Gracia: ${GRACE_PERIOD}s"
 
+LOOP_TICK=0
 while $RUNNING; do
     if [[ ! -r "$PASSWD_FILE" ]]; then
         log_msg "ERROR" "No se puede leer $PASSWD_FILE. Reintentando..."
@@ -326,6 +327,16 @@ while $RUNNING; do
             fi
         fi
     done < "$PASSWD_FILE"
+
+    # Refrescar datos y consumo en banners individuales cada ~60 segundos (20 ciclos x 3s)
+    LOOP_TICK=$(( (LOOP_TICK + 1) % 20 ))
+    if [[ $LOOP_TICK -eq 0 ]]; then
+        if [[ -x /usr/local/bin/ssh-banner ]]; then
+            /usr/local/bin/ssh-banner --refresh >/dev/null 2>&1 || true
+        elif [[ -x /etc/vps-ssh-limiter/bin/ssh-banner ]]; then
+            /etc/vps-ssh-limiter/bin/ssh-banner --refresh >/dev/null 2>&1 || true
+        fi
+    fi
 
     # Pausa pasiva para mantener el uso de CPU por debajo del 1%
     sleep "$CHECK_INTERVAL"

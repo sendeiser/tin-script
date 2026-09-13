@@ -178,6 +178,11 @@ systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/nu
 
 log_success "Dropbear configurado y activo en puertos 90 y 109."
 
+# Liberar puerto 143 de procesos zombies o remanentes de Dropbear
+if command -v fuser >/dev/null 2>&1; then
+    fuser -k 143/tcp 2>/dev/null || true
+fi
+
 # Configurar OpenSSH en puertos 22 y 143 con soporte total de contraseñas y banners individuales
 log_info "Configurando OpenSSH en puertos 22 y 143 con soporte de banners dinámicos..."
 SSHD_CFG="/etc/ssh/sshd_config"
@@ -294,13 +299,13 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.9.8" > /etc/vps-ssh-limiter/version
+echo "1.9.9" > /etc/vps-ssh-limiter/version
 
-if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
+if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]] || grep -q "TARGET_PORT=143" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'
 LISTEN_PORT=80
 TARGET_HOST=127.0.0.1
-TARGET_PORT=143
+TARGET_PORT=22
 EOF
 fi
 

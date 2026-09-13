@@ -89,9 +89,9 @@ get_system_user_info() {
     local req_user="${1:-}"
 
     U_NAME="Cuenta Conectada"
-    U_EXP="Verificada"
-    U_DAYS="Activa"
-    U_TRAFFIC="Monitorizado"
+    U_EXP="Sin exp."
+    U_DAYS="Ilimitado"
+    U_TRAFFIC="0 B"
     U_LIMIT="1"
     U_CONNS="1"
 
@@ -100,13 +100,15 @@ get_system_user_info() {
         target="$req_user"
     elif [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]] && id "${BANNER_USER}" >/dev/null 2>&1; then
         target="${BANNER_USER}"
+    elif [[ "$req_user" != "auto" && -n "$req_user" ]]; then
+        target="$req_user"
     fi
 
     if [[ -n "$target" ]]; then
         U_NAME="$target"
 
         # 1. Fecha de vencimiento y días restantes desde chage
-        if command -v chage >/dev/null 2>&1; then
+        if command -v chage >/dev/null 2>&1 && id "$target" >/dev/null 2>&1; then
             local raw_exp
             raw_exp=$(chage -l "$target" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
             if [[ -n "$raw_exp" && "$raw_exp" != "never" && "$raw_exp" != "nunca" ]]; then
@@ -122,7 +124,13 @@ get_system_user_info() {
                         U_DAYS="EXPIRADO"
                     fi
                 fi
+            else
+                U_EXP="Sin exp."
+                U_DAYS="Ilimitado"
             fi
+        else
+            U_EXP="Sin exp."
+            U_DAYS="Ilimitado"
         fi
 
         # 2. Límite de conexiones desde GECOS en /etc/passwd
@@ -167,6 +175,8 @@ get_system_user_info() {
             U_TRAFFIC=$(awk -v b="$u_bytes" 'BEGIN { printf "%.1f KB", b / 1024 }')
         elif [[ $u_bytes -gt 0 ]]; then
             U_TRAFFIC="${u_bytes} B"
+        else
+            U_TRAFFIC="0 B"
         fi
     fi
 }
@@ -293,6 +303,30 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
+# Refrescar Estadísticas de Banners Individuales (Tráfico y Expiración en vivo)
+# ------------------------------------------------------------------------------
+refresh_user_banners() {
+    load_banner_conf
+    [[ "$BANNER_ENABLED" != "true" ]] && return 0
+    mkdir -p "${CONFIG_DIR}/banners"
+
+    while IFS=: read -r u _ uid _ gecos _ msh; do
+        if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+            if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
+                continue
+            fi
+            generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net.tmp" 2>/dev/null || true
+            if [[ -s "${CONFIG_DIR}/banners/${u}.net.tmp" ]]; then
+                mv -f "${CONFIG_DIR}/banners/${u}.net.tmp" "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+                chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+            else
+                rm -f "${CONFIG_DIR}/banners/${u}.net.tmp" 2>/dev/null || true
+            fi
+        fi
+    done < /etc/passwd
+}
+
+# ------------------------------------------------------------------------------
 # Aplicar Banner en Dropbear, OpenSSH y MOTD
 # ------------------------------------------------------------------------------
 apply_banner_system() {
@@ -313,7 +347,7 @@ apply_banner_system() {
         # Generar banners específicos por cada usuario cliente en /etc/vps-ssh-limiter/banners/<user>.net
         while IFS=: read -r u _ uid _ gecos _ msh; do
             if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
-                if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
+                if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
                     continue
                 fi
                 generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
@@ -352,7 +386,30 @@ apply_banner_system() {
         fi
     done < /etc/passwd
 
-    # Configurar OpenSSH con banners específicos por usuario (Match User)
+    # 1. Configurar Dropbear en puertos 90 y 109 para liberar 143 a OpenSSH (para banners individuales)
+    if [[ -f /etc/default/dropbear ]]; then
+        sed -i 's|^#\?DROPBEAR_PORT=.*|DROPBEAR_PORT=90|g' /etc/default/dropbear
+        if grep -q "^#\?DROPBEAR_BANNER=" /etc/default/dropbear; then
+            sed -i "s|^#\?DROPBEAR_BANNER=.*|DROPBEAR_BANNER=\"${BANNER_FILE}\"|g" /etc/default/dropbear
+        else
+            echo "DROPBEAR_BANNER=\"${BANNER_FILE}\"" >> /etc/default/dropbear
+        fi
+
+        local cur_extra="-p 109"
+        if [[ "$BANNER_ENABLED" == "true" ]]; then
+            cur_extra="${cur_extra} -b ${BANNER_FILE}"
+        fi
+
+        sed -i "s|^#\?DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS=\"${cur_extra}\"|g" /etc/default/dropbear
+        systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
+    fi
+
+    # Liberar puerto 143 de procesos zombies o remanentes de Dropbear
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k 143/tcp 2>/dev/null || true
+    fi
+
+    # 2. Configurar OpenSSH con banners específicos por usuario (Match User)
     local sshd_cfg="/etc/ssh/sshd_config"
     if [[ -f "$sshd_cfg" ]]; then
         # Asegurar directiva Banner global al inicio para conexiones generales
@@ -405,12 +462,13 @@ EOF_SSHD
         fi
 
         # Si el banner está activado, añadir bloques Match User por cuenta (excluyendo admin VPS)
+        # IMPORTANTE: No incluir TCPKeepAlive dentro del bloque Match (sintaxis ilegal en Match de OpenSSH)
         if [[ "$BANNER_ENABLED" == "true" ]]; then
             {
                 echo "# BEGIN VPS-SSH-LIMITER USER BANNERS"
                 while IFS=: read -r u _ uid _ gecos _ msh; do
                     if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
-                        if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
+                        if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
                             continue
                         fi
                         if [[ -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
@@ -418,7 +476,6 @@ EOF_SSHD
                             echo "    Banner ${CONFIG_DIR}/banners/${u}.net"
                             echo "    PasswordAuthentication yes"
                             echo "    AllowTcpForwarding yes"
-                            echo "    TCPKeepAlive yes"
                             echo "    ClientAliveInterval 30"
                             echo "    ClientAliveCountMax 3"
                         fi
@@ -440,23 +497,18 @@ EOF_SSHD
         fi
     fi
 
-    # Configurar Dropbear en puertos 90 y 109 para liberar 143 a OpenSSH (para banners de usuario)
-    if [[ -f /etc/default/dropbear ]]; then
-        sed -i 's|^DROPBEAR_PORT=.*|DROPBEAR_PORT=90|g' /etc/default/dropbear
-        if grep -q "^#\?DROPBEAR_BANNER=" /etc/default/dropbear; then
-            sed -i "s|^#\?DROPBEAR_BANNER=.*|DROPBEAR_BANNER=\"${BANNER_FILE}\"|g" /etc/default/dropbear
-        else
-            echo "DROPBEAR_BANNER=\"${BANNER_FILE}\"" >> /etc/default/dropbear
-        fi
-
-        local cur_extra="-p 109"
-        if [[ "$BANNER_ENABLED" == "true" ]]; then
-            cur_extra="${cur_extra} -b ${BANNER_FILE}"
-        fi
-
-        sed -i "s|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS=\"${cur_extra}\"|g" /etc/default/dropbear
-        systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
+    # 3. Configurar ssh-wsproxy para reenviar puerto 80 hacia el puerto 22 de OpenSSH (con banners individuales)
+    mkdir -p "$CONFIG_DIR"
+    if [[ -f "${CONFIG_DIR}/wsproxy.conf" ]]; then
+        sed -i 's|^TARGET_PORT=.*|TARGET_PORT=22|g' "${CONFIG_DIR}/wsproxy.conf"
+    else
+        cat > "${CONFIG_DIR}/wsproxy.conf" <<'EOF_WS'
+LISTEN_PORT=80
+TARGET_HOST=127.0.0.1
+TARGET_PORT=22
+EOF_WS
     fi
+    systemctl restart ssh-wsproxy 2>/dev/null || true
 
     # Configurar Banner Dinámico de Usuario en Login (/etc/profile.d/vps-ssh-banner.sh)
     if [[ "$DYNAMIC_LOGIN_BANNER" == "true" ]]; then
@@ -607,15 +659,36 @@ preview_banner() {
     echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}REGISTRO HTTP CUSTOM (HTML)       ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
-    local raw_banner=""
-    raw_banner=$(generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "${BANNER_USER:-auto}")
+    local sample_u="${BANNER_USER:-auto}"
+    if [[ "$sample_u" == "auto" ]]; then
+        # Buscar primer usuario SSH de túnel para mostrar como ejemplo realista
+        if [[ -f /etc/passwd ]]; then
+            while IFS=: read -r cu _ cuid _ _ _ _; do
+                if [[ $cuid -ge 1000 && "$cu" != "nobody" && "$cu" != "nogroup" ]]; then
+                    if [[ "$cu" == "ubuntu" || "$cu" == "debian" || "$cu" == "root" || "$cu" == "admin" || "$cu" == "centos" || "$cu" == "cloud-user" || "$cu" == "systemd-"* || "$cu" == "nobody"* ]]; then
+                        continue
+                    fi
+                    sample_u="$cu"
+                    break
+                fi
+            done < /etc/passwd
+        fi
+        [[ "$sample_u" == "auto" ]] && sample_u="cliente_ssh"
+    fi
 
-    echo -e "${C_BOLD}${C_YELLOW}📱 VISTA PREVIA (En la app HTTP Custom):${C_RESET}\n"
+    local raw_banner=""
+    raw_banner=$(generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$sample_u")
+
+    echo -e "${C_BOLD}${C_YELLOW}📱 VISTA PREVIA EN HTTP CUSTOM (Ejemplo con usuario: ${C_GREEN}${sample_u}${C_YELLOW}):${C_RESET}\n"
     render_simulated_html "$raw_banner"
     echo -e "\n${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "${C_CYAN}${C_BOLD}📝 CÓDIGO HTML REGISTRADO EN EL BANNER:${C_RESET}\n"
     echo -e "${C_GRAY}${raw_banner}${C_RESET}"
     echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+    if [[ "${BANNER_USER:-auto}" == "auto" ]]; then
+        echo -e "${C_CYAN}ℹ️  Modo Dinámico Multiusuario ACTIVO:${C_RESET} Cada cliente SSH conectado verá su propio"
+        echo -e "   nombre de usuario, fecha de vencimiento y consumo de datos en su HTTP Custom."
+    fi
 
     press_enter
 }
@@ -886,6 +959,9 @@ case "${1:-}" in
     --apply|-a)
         apply_banner_system
         echo -e "${C_GREEN}✔ Banner aplicado correctamente.${C_RESET}"
+        ;;
+    --refresh|-r)
+        refresh_user_banners
         ;;
     --template|-t)
         if [[ -n "${2:-}" ]]; then
