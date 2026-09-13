@@ -37,6 +37,15 @@ get_server_ip() {
     echo "$ip"
 }
 
+get_server_host() {
+    local dom_file="/etc/vps-ssh-limiter/domain"
+    if [[ -f "$dom_file" && -s "$dom_file" ]]; then
+        tr -d '[:space:]' < "$dom_file"
+    else
+        get_server_ip
+    fi
+}
+
 get_dropbear_ports() {
     local ports="143, 90, 109"
     if [[ -f /etc/default/dropbear ]]; then
@@ -59,9 +68,9 @@ get_dropbear_ports() {
 show_client_card() {
     local user="$1"
     local pass="${2:-********}"
-    local ip
+    local ip host_conn drop_ports
     ip=$(get_server_ip)
-    local drop_ports
+    host_conn=$(get_server_host)
     drop_ports=$(get_dropbear_ports)
 
     # Expiración y límite desde el sistema
@@ -88,7 +97,12 @@ show_client_card() {
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
     echo -e "🚀 *DATOS DE TU CUENTA SSH / HTTP CUSTOM*"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "🌐 *Host / IP:* \`${ip}\`"
+    if [[ "$host_conn" != "$ip" ]]; then
+        echo -e "🌐 *Dominio / Host:* \`${host_conn}\`"
+        echo -e "📍 *IP Directa:* \`${ip}\`"
+    else
+        echo -e "🌐 *Host / IP:* \`${ip}\`"
+    fi
     echo -e "🚪 *Puertos Dropbear:* \`${drop_ports}\` (Recomendados)"
     echo -e "🚪 *Puerto OpenSSH:* \`22\`"
     echo -e "👤 *Usuario:* \`${user}\`"
@@ -97,7 +111,7 @@ show_client_card() {
     echo -e "📱 *Límite de Conexiones:* \`${limit_conn} dispositivo(s)\`"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "⚡ *Formato Rápido de Importación en HTTP Custom:*"
-    echo -e "\`${ip}:143@${user}:${pass}\`"
+    echo -e "\`${host_conn}:143@${user}:${pass}\`"
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
 }
 

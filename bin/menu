@@ -211,7 +211,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.4.0"
+    local current_ver="1.5.0"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -219,18 +219,30 @@ draw_dashboard() {
     local remote_ver=""
     remote_ver=$(curl -s4 -m 1 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
 
+    local active_dom=""
+    if [[ -f /etc/vps-ssh-limiter/domain && -s /etc/vps-ssh-limiter/domain ]]; then
+        active_dom=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/domain)
+    fi
+
+    local host_line
+    if [[ -n "$active_dom" ]]; then
+        host_line="${C_BOLD}Host:${C_RESET} ${C_GREEN}${active_dom}${C_RESET}  ${C_BOLD}IP:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
+    else
+        host_line="${C_BOLD}IP Pública:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
+    fi
+
     local ver_badge="${C_GREEN}[v${current_ver} - ACTUALIZADO]${C_RESET}"
-    local opt_7_txt="${C_BOLD}${C_YELLOW}[7]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
+    local opt_8_txt="${C_BOLD}${C_YELLOW}[8]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
 
     if [[ "$remote_ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$remote_ver" != "$current_ver" ]]; then
         ver_badge="${C_YELLOW}${C_BOLD}[v${current_ver} -> ¡NUEVA v${remote_ver} DISPONIBLE!]${C_RESET}"
-        opt_7_txt="${C_BOLD}${C_GREEN}[7]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
+        opt_8_txt="${C_BOLD}${C_GREEN}[8]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
     fi
 
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}       VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
-    echo -e " ${C_BOLD}S.O.:${C_RESET} ${os_pretty} ($(uname -m))     ${C_BOLD}IP Pública:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
+    echo -e " ${C_BOLD}S.O.:${C_RESET} ${os_pretty} ($(uname -m))     ${host_line}"
     echo -e " ${C_BOLD}Uptime:${C_RESET} ${uptime_txt}                     ${C_BOLD}Disco /:${C_RESET} ${disk_txt}"
     echo -e " ${C_BOLD}RAM:${C_RESET} ${C_CYAN}${ram_bar}${C_RESET} ${ram_txt}    ${C_BOLD}CPU:${C_RESET} ${cpu_load}"
     echo -e " ${C_BOLD}Versión:${C_RESET} ${ver_badge}"
@@ -243,9 +255,10 @@ draw_dashboard() {
     echo -e " ${C_BOLD}${C_YELLOW}[3]${C_RESET} ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET} ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Puertos Dropbear, Reiniciar SSH/Dropbear)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET} ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
-    echo -e " ${C_BOLD}${C_CYAN}[6]${C_RESET} ${C_BOLD}${C_CYAN}► GUÍA & DATOS HTTP CUSTOM${C_RESET} ${C_GRAY}(Tutorial paso a paso, Payloads y Fichas)${C_RESET}"
-    echo -e " $opt_7_txt"
-    echo -e " ${C_BOLD}${C_YELLOW}[8]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
+    echo -e " ${C_BOLD}${C_CYAN}[6]${C_RESET} ${C_BOLD}${C_CYAN}► GESTIÓN DE DOMINIO / HOST${C_RESET} ${C_GRAY}(Cloudflare API, DuckDNS, Dominio Gratis)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[7]${C_RESET} ${C_BOLD}► GUÍA & DATOS HTTP CUSTOM${C_RESET} ${C_GRAY}(Tutorial paso a paso, Payloads y Fichas)${C_RESET}"
+    echo -e " $opt_8_txt"
+    echo -e " ${C_BOLD}${C_YELLOW}[9]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
     echo -e " ${C_BOLD}${C_RED}[0]${C_RESET} ${C_BOLD}► SALIR${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
 }
@@ -693,7 +706,7 @@ fi
 while true; do
     draw_dashboard
     main_opt=""
-    read -r -p " Ingrese una opción [0-8]: " main_opt || true
+    read -r -p " Ingrese una opción [0-9]: " main_opt || true
 
     case "${main_opt:-}" in
         1) menu_users ;;
@@ -702,14 +715,21 @@ while true; do
         4) menu_ports ;;
         5) menu_tools ;;
         6)
+            if [[ -x /usr/local/bin/ssh-domain ]]; then
+                /usr/local/bin/ssh-domain
+            else
+                bash "${BASH_SOURCE[0]%/*}/ssh-domain" 2>/dev/null || true
+            fi
+            ;;
+        7)
             if [[ -x /usr/local/bin/ssh-httpcustom ]]; then
                 /usr/local/bin/ssh-httpcustom
             else
                 bash "${BASH_SOURCE[0]%/*}/ssh-httpcustom" 2>/dev/null || true
             fi
             ;;
-        7) menu_update ;;
-        8) menu_uninstall ;;
+        8) menu_update ;;
+        9) menu_uninstall ;;
         0)
             clear
             echo -e "${C_CYAN}Gracias por utilizar ${C_BOLD}vps-ssh-limiter${C_RESET}${C_CYAN}. ¡Hasta pronto!${C_RESET}\n"

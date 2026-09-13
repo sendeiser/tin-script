@@ -14,6 +14,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 ## 📑 Tabla de Contenidos
 
 - [Panel Interactivo Principal (menu / tin / vps)](#-panel-interactivo-principal-menu--tin--vps)
+- [Gestión y Creación de Dominios / Host](#-gestión-y-creación-de-dominios--host-cloudflare--duckdns--gratis)
 - [Guía y Conexión en HTTP Custom (Android / iOS)](#-guía-y-conexión-en-http-custom-android--ios)
 - [Actualizador Automático en el Menú](#-actualizador-automático-en-el-menú)
 - [Arquitectura y Principios de Diseño](#-arquitectura-y-principios-de-diseño)
@@ -24,6 +25,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 - [Referencia de Comandos CLI](#-referencia-de-comandos-cli)
   - [menu / tin / vps](#menu--tin--vps)
   - [update / ssh-update](#update--ssh-update)
+  - [ssh-domain / domain / dominio](#ssh-domain--domain--dominio)
   - [ssh-useradd](#ssh-useradd)
   - [ssh-usermod](#ssh-usermod)
   - [ssh-userlock](#ssh-userlock)
@@ -54,10 +56,10 @@ sudo menu
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║        VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
- S.O.: Ubuntu 22.04 LTS (x86_64)     IP Pública: 198.51.100.24
+ S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.miservidor.com  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.4.0 - ACTUALIZADO]
+ Versión: [v1.5.0 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  OpenSSH: [ONLINE]   Dropbear: [ONLINE]   Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
@@ -67,11 +69,35 @@ sudo menu
  [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
  [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, Reiniciar SSH/Dropbear)
  [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
- [6] ► GUÍA & DATOS HTTP CUSTOM (Tutorial paso a paso, Payloads y Fichas)
- [7] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
- [8] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
+ [6] ► GESTIÓN DE DOMINIO / HOST (Cloudflare API, DuckDNS, Dominio Gratis)
+ [7] ► GUÍA & DATOS HTTP CUSTOM (Tutorial paso a paso, Payloads y Fichas)
+ [8] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
+ [9] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
  [0] ► SALIR
 ══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 🌐 Gestión y Creación de Dominios / Host (Cloudflare, DuckDNS, Gratis)
+
+Al igual que en **Darnyx Script** y **VPS-MX**, dispones de un módulo completo para crear y apuntar subdominios hacia la IP de tu VPS, lo cual es fundamental para túneles WebSocket, CDN Cloudflare, SNI y certificados SSL:
+
+### 1. Métodos Disponibles en el Menú:
+- **Cloudflare API (Automático):** Ingresa tu API Token o Global Key + Email, selecciona tu dominio y el nombre del subdominio (ej: `vps1.midominio.com`). El script se conecta a la API de Cloudflare, obtiene tu Zone ID y crea el registro tipo **A** de forma automática (con soporte para Proxy Nube Naranja o DNS Gris).
+- **DuckDNS (Dinámico y Gratuito):** Conecta cualquier subdominio `*.duckdns.org` con tu token gratuito. El script actualiza la IP en DuckDNS y configura una tarea automática de renovación periódica.
+- **Dominio Gratuito Instantáneo (1-Click sslip.io):** Genera un dominio FQDN válido internacionalmente (ej: `vps-198-51-100-24.sslip.io`) que resuelve hacia la IP de tu VPS en 1 segundo, sin registrar cuentas ni pagar nada.
+- **Asignar Dominio Propio Manualmente:** Guarda un dominio existente que ya hayas apuntado en tu proveedor DNS.
+- **Diagnóstico DNS en Vivo:** Prueba la resolución global de tu dominio utilizando los servidores DNS de Google (`8.8.8.8`) y el resolvedor del sistema.
+
+### 2. Atajos Rápidos por Terminal:
+```bash
+# Abrir el gestor de dominios:
+domain
+# O también:
+dominio
+# O comando completo:
+ssh-domain
 ```
 
 ---
@@ -126,11 +152,11 @@ Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automát
 
 El sistema cuenta con **detección inteligente de versiones**:
 1. Cada vez que abres el menú, consulta en segundo plano la última versión disponible en GitHub.
-2. Si detecta una nueva actualización, la opción **`[7] ► ACTUALIZAR SCRIPT`** se resalta automáticamente con una alerta visual:
+2. Si detecta una nueva actualización, la opción **`[8] ► ACTUALIZAR SCRIPT`** se resalta automáticamente con una alerta visual:
    ```text
-   [7] ► ACTUALIZAR SCRIPT ★ ¡NUEVA ACTUALIZACIÓN vX.Y.Z DISPONIBLE! ★
+   [8] ► ACTUALIZAR SCRIPT ★ ¡NUEVA ACTUALIZACIÓN vX.Y.Z DISPONIBLE! ★
    ```
-3. Al presionar **`7`**, el actualizador:
+3. Al presionar **`8`**, el actualizador:
    - Descarga los archivos y micro-scripts nuevos.
    - Preserva todas las cuentas y contraseñas de tus usuarios.
    - Reinicia los servicios correspondientes.
@@ -222,6 +248,8 @@ El instalador se encargará de:
 vps-ssh-limiter/
 ├── bin/
 │   ├── menu                # Panel interactivo estilo Darnyx / ChumoGH (atajos: menu, tin, vps)
+│   ├── ssh-domain          # CLI: Gestor de dominios y DNS (Cloudflare API, DuckDNS, sslip.io) (atajos: domain, dominio)
+│   ├── ssh-httpcustom      # CLI: Guía, payloads y fichas para HTTP Custom (atajos: httpcustom, custom)
 │   ├── ssh-update          # CLI: Actualizador automático desde GitHub (atajo: update)
 │   ├── ssh-useradd         # CLI: Creación de usuarios con límite GECOS y expiración
 │   ├── ssh-usermod         # CLI: Renovación de días, modificación de cuota y cambio de clave
@@ -348,6 +376,36 @@ ssh-online --json
 
 ---
 
+### `ssh-domain` / `domain` / `dominio`
+
+Gestión y vinculación de dominios y subdominios hacia la IP del VPS (Cloudflare API, DuckDNS, sslip.io, validación DNS):
+
+```bash
+# Abrir el menú interactivo de dominios:
+domain
+# O también:
+dominio
+# O comando completo:
+ssh-domain
+
+# Ver el dominio actualmente configurado en el servidor:
+ssh-domain --show
+
+# Diagnóstico de propagación DNS del dominio actual:
+ssh-domain --check
+
+# Asignar un dominio propio directamente por parámetro:
+sudo ssh-domain --set midominio.com
+
+# Asignar un dominio gratuito instantáneo (sslip.io):
+sudo ssh-domain --instant
+
+# Eliminar el dominio configurado y volver a usar solo la IP:
+sudo ssh-domain --unset
+```
+
+---
+
 ### `ssh-httpcustom` / `httpcustom`
 
 Herramienta interactiva y generador de fichas de conexión para la aplicación HTTP Custom, con tutorial paso a paso y ejemplos de payloads:
@@ -428,7 +486,7 @@ Puedes gestionar los puertos de Dropbear y reiniciar los servicios directamente 
 
 ## 🗑 Desinstalación
 
-Puedes desinstalar el script desde la opción **[7]** del menú `menu` o ejecutando:
+Puedes desinstalar el script desde la opción **[9]** del menú `menu` o ejecutando:
 
 ```bash
 sudo ./install.sh --uninstall
