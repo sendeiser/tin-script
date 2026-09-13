@@ -88,10 +88,10 @@ EOF
 get_system_user_info() {
     local req_user="${1:-}"
 
-    U_NAME="cliente_ssh"
-    U_EXP="Sin exp."
-    U_DAYS="Ilimitado"
-    U_TRAFFIC="0 B"
+    U_NAME="Cuenta Conectada"
+    U_EXP="Verificada"
+    U_DAYS="Activa"
+    U_TRAFFIC="Monitorizado"
     U_LIMIT="1"
     U_CONNS="1"
 
@@ -100,14 +100,6 @@ get_system_user_info() {
         target="$req_user"
     elif [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]] && id "${BANNER_USER}" >/dev/null 2>&1; then
         target="${BANNER_USER}"
-    else
-        # Auto-detectar primer usuario de cliente activo en el sistema (UID >= 1000)
-        while IFS=: read -r _u _ _uid _ _ _ _; do
-            if [[ $_uid -ge 1000 && "$_u" != "nobody" && "$_u" != "nogroup" ]]; then
-                target="$_u"
-                break
-            fi
-        done < /etc/passwd
     fi
 
     if [[ -n "$target" ]]; then
@@ -318,9 +310,12 @@ apply_banner_system() {
         cp -f "$BANNER_FILE" "/etc/dropbear/banner" 2>/dev/null || true
         chmod 644 "$BANNER_FILE" "$ISSUE_FILE" "/etc/dropbear/banner" 2>/dev/null || true
 
-        # Generar banners específicos por cada usuario en /etc/vps-ssh-limiter/banners/<user>.net
-        while IFS=: read -r u _ uid _ _ _ _; do
-            if [[ $uid -ge 1000 && "$u" != "nobody" ]]; then
+        # Generar banners específicos por cada usuario cliente en /etc/vps-ssh-limiter/banners/<user>.net
+        while IFS=: read -r u _ uid _ gecos _ msh; do
+            if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+                if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
+                    continue
+                fi
                 generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
                 chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
             fi
@@ -360,9 +355,12 @@ apply_banner_system() {
     # Configurar OpenSSH con banners específicos por usuario (Match User)
     local sshd_cfg="/etc/ssh/sshd_config"
     if [[ -f "$sshd_cfg" ]]; then
-        # Desactivar directiva Banner global al inicio para que OpenSSH
-        # aplique el banner individual de cada cuenta en Match User
-        sed -i 's|^#\?Banner\s\+.*|#Banner none|g' "$sshd_cfg"
+        # Asegurar directiva Banner global al inicio para conexiones generales
+        if grep -q "^#\?Banner" "$sshd_cfg"; then
+            sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
+        else
+            sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
+        fi
 
         # Asegurar puertos 22 y 143 para OpenSSH con banners individuales
         if ! grep -E -q "^Port\s+143" "$sshd_cfg"; then
@@ -406,20 +404,28 @@ EOF_SSHD
             sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
         fi
 
-        # Si el banner está activado, añadir bloques Match User al final del archivo
+        # Si el banner está activado, añadir bloques Match User por cuenta (excluyendo admin VPS)
         if [[ "$BANNER_ENABLED" == "true" ]]; then
-            local match_blocks=""
-            match_blocks+="# BEGIN VPS-SSH-LIMITER USER BANNERS\n"
-            while IFS=: read -r u _ uid _ _ _ _; do
-                if [[ $uid -ge 1000 && "$u" != "nobody" && -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
-                    match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n    PasswordAuthentication yes\n    AllowTcpForwarding yes\n    TCPKeepAlive yes\n    ClientAliveInterval 30\n    ClientAliveCountMax 3\n"
-                fi
-            done < /etc/passwd
-            # Bloque de respaldo para conexiones no coincidentes o generales
-            match_blocks+="Match all\n    Banner ${BANNER_FILE}\n"
-            match_blocks+="# END VPS-SSH-LIMITER USER BANNERS\n"
-
-            echo -e "\n$match_blocks" >> "$sshd_cfg"
+            {
+                echo "# BEGIN VPS-SSH-LIMITER USER BANNERS"
+                while IFS=: read -r u _ uid _ gecos _ msh; do
+                    if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+                        if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
+                            continue
+                        fi
+                        if [[ -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
+                            echo "Match User ${u}"
+                            echo "    Banner ${CONFIG_DIR}/banners/${u}.net"
+                            echo "    PasswordAuthentication yes"
+                            echo "    AllowTcpForwarding yes"
+                            echo "    TCPKeepAlive yes"
+                            echo "    ClientAliveInterval 30"
+                            echo "    ClientAliveCountMax 3"
+                        fi
+                    fi
+                done < /etc/passwd
+                echo "# END VPS-SSH-LIMITER USER BANNERS"
+            } >> "$sshd_cfg"
         fi
 
         # Validar sintaxis con sshd -t antes de recargar
@@ -427,9 +433,8 @@ EOF_SSHD
             if sshd -t 2>/dev/null; then
                 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
             else
-                # Si falló la sintaxis, revertir bloque Match y restaurar banner global
+                # Si falló la sintaxis, revertir bloque Match
                 sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
-                sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
                 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
             fi
         fi
@@ -667,8 +672,11 @@ select_user_for_banner() {
     echo -e "  ${C_GREEN}[D]${C_RESET} Modo Dinámico Multiusuario ${C_YELLOW}(Recomendado - Cada cliente ve sus datos)${C_RESET}"
 
     local users=()
-    while IFS=: read -r u _ uid _ _ _ _; do
-        if [[ $uid -ge 1000 && "$u" != "nobody" ]]; then
+    while IFS=: read -r u _ uid _ gecos _ msh; do
+        if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+            if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
+                continue
+            fi
             users+=("$u")
         fi
     done < /etc/passwd

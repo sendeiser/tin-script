@@ -21,7 +21,7 @@ if [[ -z "$u" || "$u" == "root" ]]; then
         u="$(getent passwd "$_uid" 2>/dev/null | cut -d: -f1 || true)"
     fi
 fi
-if [[ -z "$u" ]]; then
+if [[ -z "$u" || "$u" == "root" || "$u" == "ubuntu" || "$u" == "debian" || "$u" == "admin" ]]; then
     u="usuario"
 fi
 
