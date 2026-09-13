@@ -190,32 +190,6 @@ load_all_user_connections() {
             fi
         done <<< "$logs"
     fi
-
-    # 3. Conexiones OpenSSH (sshd) registradas en auth logs
-    local ssh_logs=""
-    if command -v journalctl >/dev/null 2>&1; then
-        ssh_logs=$(journalctl -u ssh -u sshd -n 500 --no-pager 2>/dev/null || true)
-    fi
-    if [[ -f /var/log/auth.log ]]; then
-        local sal
-        sal=$(tail -n 500 /var/log/auth.log 2>/dev/null | grep -i "sshd" || true)
-        ssh_logs="${ssh_logs}"$'\n'"${sal}"
-    fi
-
-    if [[ -n "$ssh_logs" ]]; then
-        while read -r sline; do
-            if [[ "$sline" =~ sshd\[([0-9]+)\]:.*Accepted\ (password|publickey)\ for\ ([^\ ]+) ]]; then
-                local spid="${BASH_REMATCH[1]}"
-                local suser="${BASH_REMATCH[3]}"
-                if [[ -d "/proc/$spid" ]]; then
-                    local cur="${USER_ACTIVE_PIDS["$suser"]:-}"
-                    if [[ ! " $cur " =~ " $spid " ]]; then
-                        USER_ACTIVE_PIDS["$suser"]="${cur} $spid"
-                    fi
-                fi
-            fi
-        done <<< "$ssh_logs"
-    fi
 }
 
 # ------------------------------------------------------------------------------
