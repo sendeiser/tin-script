@@ -347,22 +347,17 @@ EOF
 preview_banner() {
     load_banner_conf
     clear
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}      PREVISUALIZACIÓN: REGISTRO HTTP CUSTOM (MÓVIL)             ${C_RESET}${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}REGISTRO HTTP CUSTOM (MÓVIL)${C_RESET}      ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "${C_GRAY}Así es exactamente como verán el mensaje tus usuarios en el registro de HTTP Custom:${C_RESET}\n"
-    echo -e "${C_BOLD}${C_WHITE}┌─────────── REGISTRO HTTP CUSTOM (MÓVIL) ──────────┐${C_RESET}"
+    echo -e "${C_GRAY}Así verán el mensaje tus usuarios en la app:${C_RESET}\n"
     if [[ -f "$BANNER_FILE" && -s "$BANNER_FILE" ]]; then
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            echo -e "│ ${C_YELLOW}${line}${C_RESET}"
-        done < "$BANNER_FILE"
+        cat "$BANNER_FILE"
     else
-        generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" | while IFS= read -r line || [[ -n "$line" ]]; do
-            echo -e "│ ${C_YELLOW}${line}${C_RESET}"
-        done
+        generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES"
     fi
-    echo -e "${C_BOLD}${C_WHITE}└───────────────────────────────────────────────────┘${C_RESET}\n"
+    echo ""
 
     press_enter
 }
@@ -373,18 +368,18 @@ preview_banner() {
 select_template() {
     load_banner_conf
     clear
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}         SELECCIONAR PLANTILLA OPTIMIZADA PARA MÓVIL            ${C_RESET}${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}PLANTILLAS PARA HTTP CUSTOM${C_RESET}       ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "  ${C_YELLOW}[1] ★ Información de Cuenta (HTTP Custom Móvil - 41 cols)${C_RESET}"
-    echo -e "      • Cuadro de cuenta, servidor, estado, fecha/hora y teléfono 3826432180."
-    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Móvil (Elegante y Comercial - 41 cols)${C_RESET}"
-    echo -e "      • Estrellas VIP, mensaje cordial, contacto telefónico oficial."
-    echo -e "  ${C_YELLOW}[3] 🔹 Clean Minimal Móvil (Compacto y Ultra-Limpio - 41 cols)${C_RESET}"
-    echo -e "      • Diseño súper limpio, sin sobrecargar los logs de la app."
-    echo -e "  ${C_YELLOW}[4] 🎮 Gaming & Low-Lag Móvil (Gamer Pro - 41 cols)${C_RESET}"
-    echo -e "      • Enfoque en juegos (Free Fire/PUBG/COD), TCP BBR y anti-lag."
+    echo -e "  ${C_YELLOW}[1] ★ Info de Cuenta (Recomendado)${C_RESET}"
+    echo -e "      • Servidor, estado, fecha y tel. 3826432180."
+    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Móvil${C_RESET}"
+    echo -e "      • Estrellas VIP y contacto telefónico."
+    echo -e "  ${C_YELLOW}[3] 🔹 Clean Minimal Móvil${C_RESET}"
+    echo -e "      • Diseño compacto y ultra-limpio."
+    echo -e "  ${C_YELLOW}[4] 🎮 Gaming & Low-Lag Móvil${C_RESET}"
+    echo -e "      • Perfil para juegos y baja latencia."
     echo -e "  ${C_RED}[0] Cancelar${C_RESET}\n"
 
     local opt_t=""
@@ -404,9 +399,9 @@ select_template() {
 customize_data() {
     load_banner_conf
     clear
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}           PERSONALIZAR DATOS Y TEXTOS DEL BANNER             ${C_RESET}${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}PERSONALIZAR TEXTOS DEL BANNER${C_RESET}    ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "Valores actuales:"
     echo -e "  • ${C_BOLD}Nombre del Servidor:${C_RESET} ${C_CYAN}${SERVER_NAME}${C_RESET}"
@@ -434,9 +429,9 @@ customize_data() {
 # ------------------------------------------------------------------------------
 manual_edit_banner() {
     clear
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}           EDITOR MANUAL DEL ARCHIVO DE BANNER                ${C_RESET}${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}      ${C_BOLD}${C_WHITE}EDITOR MANUAL DEL BANNER${C_RESET}         ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
     echo -e "${C_YELLOW}Se abrirá el editor de texto para que escribas tu propio banner.${C_RESET}"
     echo -e "${C_GRAY}Al guardar, el texto se aplicará de inmediato en OpenSSH y Dropbear.${C_RESET}\n"
     press_enter
@@ -514,20 +509,20 @@ main_banner_menu() {
             5) t_label="Personalizado" ;;
         esac
 
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}        GESTIÓN DE BANNERS Y BIENVENIDA SSH / APPS            ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  • Banner en Apps (HTTP Custom): ${b_status}  Plantilla: ${C_YELLOW}${t_label}${C_RESET}"
-        echo -e "  • Info Dinámica de Usuario:     ${d_status}  Servidor:  ${C_CYAN}${SERVER_NAME}${C_RESET}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}BANNERS Y REGISTRO HTTP CUSTOM${C_RESET}    ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  • Apps: ${b_status}  ${C_YELLOW}${t_label}${C_RESET}"
+        echo -e "  • Dinámico: ${d_status}  ${C_CYAN}${SERVER_NAME}${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         echo -e "  ${C_YELLOW}[1]${C_RESET} 👁️  Previsualizar banner actual"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} 🎨  Elegir plantilla prediseñada (Cyberpunk, VIP, Gamer, Minimal)"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} ✏️  Personalizar textos (Nombre de servidor, contacto, reglas)"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} 📝  Editar archivo de banner manualmente (Editor libre)"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} ⚡  Activar / Desactivar Banner en Apps (${b_status})"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} 👤  Activar / Desactivar Info Dinámica de Usuario (${d_status})"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} 🎨  Elegir plantilla prediseñada"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} ✏️  Personalizar textos/contacto"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} 📝  Editar archivo manualmente"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} ⚡  Activar / Desactivar en Apps"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} 👤  Activar / Desactivar Dinámico"
         echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
         local opt=""
         read -r -p "Seleccione una opción [0-6]: " opt || true

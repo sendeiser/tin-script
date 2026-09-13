@@ -92,21 +92,21 @@ show_httpcustom_card() {
         fi
     fi
 
-    echo -e "\n${C_GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_GREEN}║                 DATOS LISTOS PARA COPIAR EN HTTP CUSTOM                      ║${C_RESET}"
-    echo -e "${C_GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
+    echo -e "\n${C_GREEN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_GREEN}║${C_RESET}     ${C_BOLD}${C_WHITE}DATOS LISTOS PARA HTTP CUSTOM${C_RESET}     ${C_GREEN}║${C_RESET}"
+    echo -e "${C_GREEN}╚═══════════════════════════════════════╝${C_RESET}"
     echo -e "  • ${C_BOLD}Server / Host SSH:${C_RESET}  ${C_CYAN}${C_BOLD}${target_dom}:80${C_RESET}"
     echo -e "  • ${C_BOLD}Puerto:${C_RESET}             ${C_YELLOW}80${C_RESET} (Servicio WebSocket ssh-wsproxy -> Dropbear:143)"
     echo -e "  • ${C_BOLD}Usuario Túnel:${C_RESET}      ${C_WHITE}${sample_user}${C_RESET}"
     echo -e "  • ${C_BOLD}Contraseña:${C_RESET}         ${C_WHITE}${sample_pass}${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  ${C_BOLD}Payload recomendado listo para copiar y pegar en HTTP Custom:${C_RESET}"
     if [[ "$mode" == "cloudflare" ]]; then
         echo -e "  ${C_CYAN}GET / HTTP/1.3[crlf]Host: rexo.personal.com.ar[crlf][crlf][crlf][split][crlf][split]GETT / HTTP/1.1[crlf]Host: ${target_dom}[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]${C_RESET}"
     else
         echo -e "  ${C_CYAN}GET / HTTP/1.1[crlf]Host: rexo.personal.com.ar[crlf]Upgrade: websocket[crlf]Connection: Keep-Alive[crlf][crlf]${C_RESET}"
     fi
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  ${C_YELLOW}★ Instrucciones de conexión en la app HTTP Custom de tu teléfono:${C_RESET}"
     echo -e "    1. Abre HTTP Custom y activa las casillas ${C_BOLD}'Payload'${C_RESET} y ${C_BOLD}'Auto Ping'${C_RESET}."
     echo -e "    2. En el recuadro superior pega el ${C_BOLD}Payload${C_RESET} de arriba."
@@ -116,7 +116,7 @@ show_httpcustom_card() {
         echo -e "       ${C_GREEN}woocommerce.everlytic.net:80@${sample_user}:${sample_pass}${C_RESET} (o ${C_GREEN}104.16.51.111:80@...${C_RESET})"
     fi
     echo -e "    4. Pulsa ${C_GREEN}${C_BOLD}[CONNECT]${C_RESET}. ¡Conexión establecida exitosamente!"
-    echo -e "${C_GREEN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
+    echo -e "${C_GREEN}═════════════════════════════════════════${C_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -211,9 +211,9 @@ load_cf_credentials() {
         fi
     fi
 
-    echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║             AUTENTICACIÓN EN CLOUDFLARE API                      ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
+    echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}AUTENTICACIÓN CLOUDFLARE${C_RESET}          ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
     echo -e "${C_YELLOW}¿Dónde obtener tus credenciales gratuitas de Cloudflare?${C_RESET}"
     echo -e " 1. Ingresa a tu panel en: ${C_CYAN}https://dash.cloudflare.com${C_RESET}"
     echo -e " 2. Arriba a la derecha haz clic en tu perfil > ${C_BOLD}'My Profile' (Mi Perfil)${C_RESET}"
@@ -224,7 +224,7 @@ load_cf_credentials() {
     echo -e "    ${C_GREEN}● [2] API Token:${C_RESET}"
     echo -e "      'Create Token' > plantilla 'Edit zone DNS' > Zona: 'All zones'."
     echo -e "      ${C_GRAY}(Nota: Asegúrate de haber agregado tu dominio primero con el botón '+ Add a site')${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}\n"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}\n"
 
     echo -e "Selecciona el método de autenticación:"
     echo -e "  ${C_YELLOW}[1]${C_RESET} Global API Key + Correo electrónico (Recomendado sin límites)"
@@ -283,12 +283,12 @@ EOF
 wizard_step_instant() {
     local vps_ip="$1"
     clear
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║     ★ PASO A PASO: DOMINIO INSTANTÁNEO 1-CLICK (100% GRATUITO) ★             ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}DOMINIO INSTANTÁNEO SSLIP.IO${C_RESET}      ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "${C_BOLD}${C_YELLOW}Paso 1 de 3: ¿Por qué este método es 100% gratuito y no requiere nada?${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  El servicio global ${C_CYAN}sslip.io${C_RESET} proporciona resolución DNS automática en todo el"
     echo -e "  mundo sin que tengas que registrarte, ni ingresar tarjetas, ni crear contraseñas."
     echo -e "  Convierte tu IP pública en un dominio FQDN internacional válido de forma inmediata.\n"
@@ -297,7 +297,7 @@ wizard_step_instant() {
     local generated_dom="vps-${ip_dash}.sslip.io"
 
     echo -e "${C_BOLD}${C_YELLOW}Paso 2 de 3: Generación y Verificación del Dominio${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  • IP pública de tu VPS: ${C_YELLOW}${C_BOLD}${vps_ip}${C_RESET}"
     echo -e "  • Dominio asignado:     ${C_GREEN}${C_BOLD}${generated_dom}${C_RESET}\n"
 
@@ -323,7 +323,7 @@ wizard_step_instant() {
     save_domain "$generated_dom"
 
     echo -e "\n${C_BOLD}${C_YELLOW}Paso 3 de 3: Configuración Automática para HTTP Custom${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "¡Tu dominio gratuito ya está activo y vinculado a tu VPS!"
     show_httpcustom_card "$generated_dom" "$vps_ip" "direct"
     press_enter
@@ -332,12 +332,12 @@ wizard_step_instant() {
 wizard_step_duckdns() {
     local vps_ip="$1"
     clear
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║     ★ PASO A PASO: SUBDOMINIO DUCKDNS GRATUITO (*.duckdns.org) ★             ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}SUBDOMINIO DUCKDNS (GRATIS)${C_RESET}       ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "${C_BOLD}${C_YELLOW}Paso 1 de 4: Obtener tu Token Gratuito de DuckDNS${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  1. En tu celular o PC, entra en: ${C_CYAN}https://www.duckdns.org${C_RESET}"
     echo -e "  2. Haz clic en ${C_BOLD}'Sign in with Google'${C_RESET} e inicia sesión con tu Gmail (${C_GREEN}100% gratis${C_RESET})."
     echo -e "  3. En la parte superior de la página verás un recuadro con tu ${C_BOLD}'token'${C_RESET} privado."
@@ -370,7 +370,7 @@ wizard_step_duckdns() {
     fi
 
     echo -e "\n${C_BOLD}${C_YELLOW}Paso 2 de 4: Elegir tu subdominio gratuito${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  En la misma página de DuckDNS, en la sección ${C_BOLD}'domains'${C_RESET}:"
     echo -e "  1. Escribe el nombre que quieras para tu VPS (ej: ${C_CYAN}miservidor${C_RESET})."
     echo -e "  2. Haz clic en el botón verde ${C_BOLD}'add domain'${C_RESET}."
@@ -389,7 +389,7 @@ wizard_step_duckdns() {
     local full_dom="${duck_sub}.duckdns.org"
 
     echo -e "\n${C_BOLD}${C_YELLOW}Paso 3 de 4: Vinculación y Auto-renovación${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "Conectando con DuckDNS para apuntar ${C_BOLD}${full_dom}${C_RESET} -> ${C_YELLOW}${vps_ip}${C_RESET}..."
 
     local duck_res
@@ -422,7 +422,7 @@ EOF
         save_domain "$full_dom"
 
         echo -e "\n${C_BOLD}${C_YELLOW}Paso 4 de 4: Configuración para HTTP Custom${C_RESET}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         show_httpcustom_card "$full_dom" "$vps_ip" "direct"
     else
         echo -e "${C_RED}[ERROR] DuckDNS respondió con error: '$duck_res'.${C_RESET}"
@@ -434,12 +434,12 @@ EOF
 wizard_step_cloudflare() {
     local vps_ip="$1"
     clear
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║     ★ PASO A PASO: CLOUDFLARE API (PLAN GRATUITO \$0) ★                        ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}CLOUDFLARE CDN GRATIS ($0)${C_RESET}        ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "${C_BOLD}${C_YELLOW}Paso 1 de 4: ¿Qué necesitas para esta opción?${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  Cloudflare ofrece servicio de CDN y DNS ${C_GREEN}100% GRATIS${C_RESET} (Plan Free \$0)."
     echo -e "  Esta opción es para quienes ya tienen un dominio agregado en Cloudflare."
     echo -e "  El script detectará automáticamente tus dominios sin pedirte Zone IDs.\n"
@@ -449,9 +449,9 @@ wizard_step_cloudflare() {
 
 wizard_free_domains() {
     clear
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║     ★ ASISTENTE GUIADO PASO A PASO: DOMINIOS Y HOSTS 100% GRATUITOS ★       ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}DOMINIO INSTANTÁNEO SSLIP.IO${C_RESET}      ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "${C_WHITE}¡Bienvenido! Este asistente te acompañará paso a paso para configurar un${C_RESET}"
     echo -e "${C_WHITE}dominio o nombre de host para tu VPS ${C_BOLD}${C_GREEN}SIN GASTAR UN SOLO CENTAVO ($0.00)${C_RESET}${C_WHITE}.${C_RESET}\n"
@@ -466,7 +466,7 @@ wizard_free_domains() {
     echo -e "IP pública detectada de tu VPS: ${C_YELLOW}${C_BOLD}${vps_ip}${C_RESET}\n"
 
     echo -e "${C_BOLD}Elige la alternativa 100% gratuita que mejor se adapte a ti:${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  ${C_BOLD}${C_YELLOW}[1] ★ Dominio Instantáneo 1-Click (sslip.io)${C_RESET} ${C_GREEN}◄ RECOMENDADO / MÁS FÁCIL${C_RESET}"
     echo -e "      • ${C_BOLD}Costo:${C_RESET} ${C_GREEN}\$0.00 (Totalmente gratis)${C_RESET}"
     echo -e "      • ${C_BOLD}Registro:${C_RESET} ${C_CYAN}CERO registros, cero cuentas, cero contraseñas.${C_RESET}"
@@ -486,7 +486,7 @@ wizard_free_domains() {
     echo -e "      • ${C_BOLD}Detección:${C_RESET} El script detecta tu dominio automáticamente."
     echo -e ""
     echo -e "  ${C_RED}[0] Volver al menú de dominios${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
     local opt_wiz=""
     read -r -p "Selecciona una opción gratuita [0-3]: " opt_wiz || true
@@ -507,9 +507,9 @@ wizard_free_domains() {
 # 1. Integración Inteligente con Cloudflare API (Detección Automática de Zonas)
 # ------------------------------------------------------------------------------
 setup_cloudflare() {
-    echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║     CREAR SUBDOMINIO CON CLOUDFLARE API (DETECCIÓN AUTOMÁTICA)   ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}CREAR SUBDOMINIO CLOUDFLARE${C_RESET}       ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
     echo -e "${C_YELLOW}Crea o actualiza un registro DNS tipo A en tu cuenta gratuita de Cloudflare"
     echo -e "apuntando automáticamente a la IP pública de esta VPS.${C_RESET}\n"
 
@@ -719,7 +719,7 @@ setup_cloudflare() {
 
     # Paso 3: Configurar Proxy de Cloudflare (Nube Naranja CDN vs Nube Gris)
     echo -e "\n${C_BOLD}Paso 3: Configurar Proxy de Cloudflare (CDN / Nube Naranja)${C_RESET}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     echo -e "  ${C_GREEN}● PROXY ACTIVADO (Nube Naranja / Recomendado por defecto):${C_RESET}"
     echo -e "    El tráfico pasa a través de los servidores CDN de Cloudflare."
     echo -e "    ${C_YELLOW}OBLIGATORIO${C_RESET} si vas a conectar por ${C_BOLD}HTTP Custom (WebSocket en puerto 80)${C_RESET}"
@@ -727,7 +727,7 @@ setup_cloudflare() {
     echo -e "  ${C_GRAY}○ PROXY DESACTIVADO (Nube Gris / DNS Directo):${C_RESET}"
     echo -e "    Tu dominio apunta directamente a la IP de la VPS sin pasar por CDN."
     echo -e "    Útil únicamente para conexiones SSH directas (puerto 22) o BadVPN."
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     local proxy_ans=""
     read -r -p "¿Activar Proxy CDN de Cloudflare (Nube Naranja)? [S/n]: " proxy_ans || true
     local proxied="true"
@@ -777,9 +777,9 @@ setup_cloudflare() {
     fi
 
     if echo "$create_res" | grep -q '"success":true'; then
-        echo -e "\n${C_GREEN}${C_BOLD}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_GREEN}${C_BOLD}║      ✔ ¡SUBDOMINIO CONFIGURADO EXITOSAMENTE EN CLOUDFLARE!       ║${C_RESET}"
-        echo -e "${C_GREEN}${C_BOLD}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "\n${C_GREEN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_GREEN}║${C_RESET}      ${C_BOLD}${C_WHITE}SUBDOMINIO CREADO CON ÉXITO${C_RESET}      ${C_GREEN}║${C_RESET}"
+    echo -e "${C_GREEN}╚═══════════════════════════════════════╝${C_RESET}\n"
         echo -e "  • Dominio / Host:   ${C_CYAN}${C_BOLD}${full_domain}${C_RESET}"
         echo -e "  • IP Destino (VPS): ${C_YELLOW}${vps_ip}${C_RESET}"
         local proxy_desc="${C_GREEN}ACTIVADO (Nube Naranja - Cloudflare CDN WebSocket)${C_RESET}"
@@ -824,9 +824,9 @@ setup_instant_domain() {
 # 4. Asignar Dominio Propio Manualmente
 # ------------------------------------------------------------------------------
 setup_manual_domain() {
-    echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║             ASIGNAR DOMINIO PROPIO MANUALMENTE                  ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}       ${C_BOLD}${C_WHITE}ASIGNAR DOMINIO MANUAL${C_RESET}          ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
     echo -e "${C_YELLOW}Utiliza esta opción si ya tienes tu dominio y creaste el registro"
     echo -e "tipo 'A' apuntando a la IP de tu VPS en tu registrador o panel DNS.${C_RESET}\n"
 
@@ -878,9 +878,9 @@ check_dns_status() {
     local vps_ip
     vps_ip=$(get_public_ip)
 
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║                   ESTADO Y DIAGNÓSTICO DNS                      ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}       ${C_BOLD}${C_WHITE}ESTADO Y DIAGNÓSTICO DNS${C_RESET}        ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
     echo -e "IP pública de la VPS: ${C_YELLOW}${vps_ip}${C_RESET}"
 
     if [[ -z "$current_dom" ]]; then
@@ -944,12 +944,12 @@ delete_domain() {
 # ------------------------------------------------------------------------------
 show_domain_guide() {
     clear
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║     GUÍA COMPLETA: CÓMO CREAR, CONFIGURAR Y USAR DOMINIOS EN TU VPS      ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}      ${C_BOLD}${C_WHITE}GUÍA DE DOMINIOS Y HOSTS${C_RESET}         ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "${C_BOLD}${C_YELLOW}1. OPCIONES 100% GRATUITAS ($0.00) DISPONIBLES EN ESTE SCRIPT${C_RESET}"
-    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "─────────────────────────────────────────"
     echo -e "  • ${C_GREEN}Opción A: Dominio Instantáneo (sslip.io):${C_RESET}"
     echo -e "    - Costo: \$0.00. Cero cuentas, cero registros."
     echo -e "    - Genera al instante: vps-X-X-X-X.sslip.io."
@@ -962,7 +962,7 @@ show_domain_guide() {
     echo -e "    - Cloudflare no cobra nada por gestionar DNS ni por su red CDN WebSocket.\n"
 
     echo -e "${C_BOLD}${C_YELLOW}2. ¿CÓMO FUNCIONA LA CONEXIÓN WEBSOCKET CDN (PUERTO 80)?${C_RESET}"
-    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "─────────────────────────────────────────"
     echo -e "  [Tu Celular / HTTP Custom]"
     echo -e "       │"
     echo -e "       ▼ (Petición HTTP con Bug Host de la operadora)"
@@ -972,13 +972,13 @@ show_domain_guide() {
     echo -e "  [Tu VPS (Puerto 80: ssh-wsproxy -> Dropbear:143)] -> ¡Túnel Establecido!\n"
 
     echo -e "${C_BOLD}${C_YELLOW}3. NUBE NARANJA (PROXY CDN) VS NUBE GRIS (DNS DIRECTO)${C_RESET}"
-    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "─────────────────────────────────────────"
     echo -e "  • ${C_GREEN}Nube Naranja (Proxy: ON):${C_RESET} OBLIGATORIO si usas Payloads Split con Bug Host"
     echo -e "    para que Cloudflare rutee el tráfico hacia tu VPS en puerto 80."
     echo -e "  • ${C_GRAY}Nube Gris / Directo (sslip.io / DuckDNS):${C_RESET} Conecta directo a tu servidor."
     echo -e "    El demonio ${C_BOLD}ssh-wsproxy${C_RESET} instalado en tu VPS recibe el WebSocket directo"
     echo -e "    en el puerto 80 sin intermediarios, con menor latencia y cero costo."
-    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "─────────────────────────────────────────"
     press_enter
 }
 
@@ -987,9 +987,9 @@ show_domain_guide() {
 # ------------------------------------------------------------------------------
 manage_saved_credentials() {
     clear
-    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║            ADMINISTRAR CREDENCIALES GUARDADAS                    ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}      ${C_BOLD}${C_WHITE}CREDENCIALES GUARDADAS${C_RESET}           ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "Estado de credenciales en el servidor:"
     if [[ -f "$CF_CONF_FILE" ]]; then

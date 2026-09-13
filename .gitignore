@@ -8,3 +8,6 @@ Thumbs.db
 .vscode/
 *.bak*
 *.tmp
+__pycache__/
+*.pyc
+scratch/

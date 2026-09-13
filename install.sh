@@ -118,17 +118,12 @@ fi
 # ------------------------------------------------------------------------------
 # Banner de Instalación
 # ------------------------------------------------------------------------------
-echo -e "${C_CYAN}${C_BOLD}"
-cat <<'EOF'
-  __   ______  ____        ____ ____  _   _     _     ___ __  __ ___ _____ _____ ____  
-  \ \ / /  _ \/ ___|      / ___/ ___|| | | |   | |   |_ _|  \/  |_ _|_   _| ____|  _ \ 
-   \ V /| |_) \___ \ _____\___ \___ \| |_| |   | |    | || |\/| || |  | | |  _| | |_) |
-    \_/ | .__/ ___) |_____|___) |__) |  _  |   | |___ | || |  | || |  | | | |___|  _ < 
-        |_|   |____/      |____/____/|_| |_|   |_____|___|_|  |_|___| |_| |_____|_| \_\
-EOF
-echo -e "${C_RESET}"
-echo -e "${C_GRAY}Instalador automatizado de alta eficiencia para SSH & Dropbear${C_RESET}"
-echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
+echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}★ VPS SSH LIMITER & PROXY PRO ★${C_RESET}   ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}       ${C_GREEN}Instalador Automático Móvil${C_RESET}     ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+echo -e " ${C_BOLD}Contacto / Soporte:${C_RESET} ${C_YELLOW}3826432180${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
 # ------------------------------------------------------------------------------
 # 1. Instalación de Dependencias del Sistema
@@ -346,29 +341,26 @@ fi
 # ------------------------------------------------------------------------------
 # Resumen y Guía Rápida de Comandos
 # ------------------------------------------------------------------------------
-echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
-echo -e "${C_GREEN}${C_BOLD}✔ ¡INSTALACIÓN COMPLETADA EXITOSAMENTE!${C_RESET}\n"
-echo -e "${C_BOLD}Acceso al Panel y Actualizaciones:${C_RESET}"
-echo -e "  ${C_BOLD}${C_GREEN}menu${C_RESET}   (o ${C_CYAN}tin${C_RESET} / ${C_CYAN}vps${C_RESET})     : Abre el panel interactivo completo"
-echo -e "  ${C_BOLD}${C_YELLOW}update${C_RESET} (o ${C_CYAN}ssh-update${C_RESET})  : Actualiza el script automáticamente a la última versión"
-echo -e ""
-echo -e "${C_BOLD}Comandos CLI directos disponibles:${C_RESET}"
-echo -e "  ${C_CYAN}ssh-useradd <u|p|d|l>${C_RESET}  : Crear usuario túnel restringido"
-echo -e "  ${C_CYAN}ssh-usermod <u|opciones>${C_RESET}: Renovar días, límite o contraseña"
-echo -e "  ${C_CYAN}ssh-userlock <u|lock|unlock>${C_RESET}: Bloquear o desbloquear cuenta"
-echo -e "  ${C_CYAN}ssh-killuser <u|--all-exceeded>${C_RESET}: Desconectar sesiones activas"
-echo -e "  ${C_CYAN}ssh-userdel <usuario>${C_RESET}      : Revocar y eliminar usuario"
-echo -e "  ${C_CYAN}ssh-online${C_RESET}             : Monitor de conexiones en tiempo real (--json para APIs)"
-echo -e "  ${C_CYAN}ssh-banner${C_RESET}             : Gestor de banners de bienvenida y estado (atajo: banner)"
-echo -e "  ${C_CYAN}ssh-httpcustom [usuario]${C_RESET}: Generador de fichas y guía para HTTP Custom (atajos: httpcustom, custom)"
-echo -e "  ${C_CYAN}ssh-domain${C_RESET}               : Gestor de dominios Cloudflare/DuckDNS/Gratis (atajos: domain, dominio)"
-echo -e "  ${C_CYAN}ssh-wsproxy${C_RESET}              : WebSocket Proxy puerto 80 para HTTP Custom / CDN (atajo: wsproxy)"
-echo -e ""
-echo -e "${C_BOLD}Supervisión de Servicios:${C_RESET}"
-echo -e "  ${C_GRAY}systemctl status ssh-limiter${C_RESET}   : Estado del limitador de conexiones"
-echo -e "  ${C_GRAY}systemctl status ssh-wsproxy${C_RESET}   : Estado del WebSocket Proxy (Puerto 80)"
-echo -e "  ${C_GRAY}journalctl -u ssh-limiter -f${C_RESET}   : Registros del limitador en vivo"
-echo -e "  ${C_GRAY}journalctl -u ssh-wsproxy -f${C_RESET}   : Registros del WebSocket Proxy en vivo"
-echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+echo -e "${C_GREEN}${C_BOLD}✔ ¡INSTALACIÓN COMPLETADA CON ÉXITO!${C_RESET}\n"
+echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}★ ACCESO AL PANEL DE CONTROL ★${C_RESET}    ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+echo -e "  Comando : ${C_BOLD}${C_GREEN}menu${C_RESET}  (o ${C_CYAN}tin${C_RESET} / ${C_CYAN}vps${C_RESET})"
+echo -e "  Update  : ${C_BOLD}${C_YELLOW}update${C_RESET} (actualizar versión)"
+echo -e "  Soporte : ${C_BOLD}3826432180${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+echo -e "${C_BOLD}Comandos CLI directos:${C_RESET}"
+echo -e "  ● ${C_CYAN}menu${C_RESET}         : Panel principal"
+echo -e "  ● ${C_CYAN}ssh-online${C_RESET}   : Monitor de datos y cuentas"
+echo -e "  ● ${C_CYAN}ssh-useradd${C_RESET}  : Crear cuenta túnel"
+echo -e "  ● ${C_CYAN}ssh-usermod${C_RESET}  : Modificar cuenta o días"
+echo -e "  ● ${C_CYAN}ssh-userlock${C_RESET} : Bloquear o desbloquear"
+echo -e "  ● ${C_CYAN}ssh-killuser${C_RESET} : Expulsar sesiones"
+echo -e "  ● ${C_CYAN}ssh-userdel${C_RESET}  : Eliminar usuario"
+echo -e "  ● ${C_CYAN}ssh-httpcustom${C_RESET}: Fichas para la app"
+echo -e "  ● ${C_CYAN}ssh-domain${C_RESET}   : Dominios Cloudflare/Gratis"
+echo -e "  ● ${C_CYAN}ssh-banner${C_RESET}   : Banners y mensajes"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
 exit 0

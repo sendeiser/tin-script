@@ -76,18 +76,34 @@ case "$ACTION" in
         passwd -l "$USERNAME" >/dev/null 2>&1
         # Expulsar de inmediato cualquier conexión en curso
         pkill -u "$USERNAME" -9 2>/dev/null || true
-        echo -e "${C_GREEN}✔ Cuenta de '$USERNAME' bloqueada exitosamente.${C_RESET} Conexiones activas cerradas."
+        echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}CUENTA BLOQUEADA CON ÉXITO${C_RESET}        ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ● Usuario  : ${C_BOLD}${USERNAME}${C_RESET}"
+        echo -e "  ● Estado   : ${C_RED}[BLOQUEADO]${C_RESET}"
+        echo -e "  ● Sesiones : Conexiones activas cerradas"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         ;;
     unlock)
         passwd -u "$USERNAME" >/dev/null 2>&1
-        echo -e "${C_GREEN}✔ Cuenta de '$USERNAME' desbloqueada exitosamente.${C_RESET}"
+        echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}    ${C_BOLD}${C_WHITE}CUENTA DESBLOQUEADA CON ÉXITO${C_RESET}      ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ● Usuario  : ${C_BOLD}${USERNAME}${C_RESET}"
+        echo -e "  ● Estado   : ${C_GREEN}[ACTIVO / HABILITADO]${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         ;;
     status)
+        echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}      ${C_BOLD}${C_WHITE}ESTADO DE CUENTA DE USUARIO${C_RESET}       ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ● Usuario  : ${C_BOLD}${USERNAME}${C_RESET}"
         if is_locked; then
-            echo -e "Estado de '${USERNAME}': ${C_RED}${C_BOLD}[BLOQUEADO]${C_RESET}"
+            echo -e "  ● Estado   : ${C_RED}${C_BOLD}[BLOQUEADO]${C_RESET}"
         else
-            echo -e "Estado de '${USERNAME}': ${C_GREEN}${C_BOLD}[ACTIVO / DESBLOQUEADO]${C_RESET}"
+            echo -e "  ● Estado   : ${C_GREEN}${C_BOLD}[ACTIVO / HABILITADO]${C_RESET}"
         fi
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         ;;
     *)
         echo -e "${C_RED}[ERROR]${C_RESET} Acción desconocida '$ACTION'. Use 'lock', 'unlock' o 'status'." >&2

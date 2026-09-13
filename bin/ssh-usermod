@@ -160,4 +160,14 @@ if [[ -n "$NEW_PASSWORD" ]]; then
     echo -e "${C_GREEN}✔ Contraseña actualizada exitosamente.${C_RESET}"
 fi
 
+echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}CUENTA MODIFICADA EXITOSAMENTE${C_RESET}    ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+echo -e "  ● Usuario     : ${C_BOLD}${USERNAME}${C_RESET}"
+[[ -n "${ADD_DAYS:-}" ]] && echo -e "  ● Vencimiento : ${C_GREEN}${NEW_EXPIRY_DATE}${C_RESET}"
+[[ -n "${NEW_LIMIT:-}" ]] && echo -e "  ● Límite      : ${C_CYAN}${NEW_LIMIT} conexión(es)${C_RESET}"
+[[ -n "${NEW_PASSWORD:-}" ]] && echo -e "  ● Contraseña  : ${C_YELLOW}${NEW_PASSWORD}${C_RESET}"
+echo -e "  ● Contacto    : ${C_WHITE}3826432180${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+
 exit 0

@@ -91,8 +91,13 @@ fi
 # ------------------------------------------------------------------------------
 # Eliminación del usuario del sistema
 # ------------------------------------------------------------------------------
-# userdel -f: Forzar eliminación incluso si todavía existe algún socket o descriptor
 userdel -f "$USERNAME"
 
-echo -e "${C_GREEN}✔ Usuario '$USERNAME' y todas sus conexiones fueron eliminados exitosamente.${C_RESET}"
+echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}USUARIO ELIMINADO CON ÉXITO${C_RESET}       ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+echo -e "  ● Usuario   : ${C_BOLD}${USERNAME}${C_RESET}"
+echo -e "  ● Estado    : ${C_RED}Revocado y Eliminado${C_RESET}"
+echo -e "  ● Procesos  : Sesiones SSH cerradas"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 exit 0

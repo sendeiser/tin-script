@@ -59,51 +59,64 @@ fi
 TARGET="$1"
 
 if [[ "$TARGET" == "--all-exceeded" ]]; then
-    echo -e "${C_CYAN}Escaneando usuarios en búsqueda de conexiones excedentes...${C_RESET}"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}EXPULSIÓN DE SESIONES EXCEDENTES${C_RESET}  ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+    echo -e "${C_GRAY}Escaneando usuarios en el sistema...${C_RESET}\n"
     PASSWD_FILE="${PASSWD_FILE:-/etc/passwd}"
     KILLED_COUNT=0
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^([a-zA-Z0-9_-]+):.*:LIM[:_=-]?([0-9]+) ]]; then
-            u="${BASH_REMATCH[1]}"
-            limit="${BASH_REMATCH[2]}"
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        IFS=':' read -r u _ uid _ gecos _ shell <<< "$line"
 
-            ssh_pids=$(pgrep -u "$u" -f "^sshd: $u@" 2>/dev/null || true)
-            dropbear_pids=$(pgrep -u "$u" -x "dropbear" 2>/dev/null || true)
+        limit=""
+        if [[ "$gecos" =~ LIM[:_=-]?([0-9]+) ]]; then
+            limit="${BASH_REMATCH[1]}"
+        elif [[ "$uid" =~ ^[0-9]+$ && "$uid" -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+            limit=1
+        fi
 
-            all_pids=()
-            for p in $ssh_pids $dropbear_pids; do
-                if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
-                    all_pids+=("$p")
-                fi
-            done
+        [[ -z "$limit" ]] && continue
 
-            total=${#all_pids[@]}
-            if [[ "$total" -gt "$limit" ]]; then
-                surplus=$((total - limit))
-                echo -e "${C_YELLOW}Usuario '$u':${C_RESET} $total conexiones activas vs $limit permitidas. Expulsando $surplus conexión(es) excedente(s)..."
+        ssh_pids=$(pgrep -u "$u" -f "^sshd: $u@" 2>/dev/null || true)
+        dropbear_pids=$(pgrep -u "$u" -x "dropbear" 2>/dev/null || true)
 
-                pids_csv=$(IFS=,; echo "${all_pids[*]}")
-                ranked=()
-                while read -r r_pid _; do
-                    if [[ -n "$r_pid" && "$r_pid" =~ ^[0-9]+$ ]]; then
-                        ranked+=("$r_pid")
-                    fi
-                done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=-etimes 2>/dev/null || true)
-
-                if [[ ${#ranked[@]} -eq 0 ]]; then
-                    ranked=("${all_pids[@]}")
-                fi
-
-                for (( i=limit; i<${#ranked[@]}; i++ )); do
-                    kill -9 "${ranked[i]}" 2>/dev/null || true
-                    KILLED_COUNT=$((KILLED_COUNT + 1))
-                done
+        all_pids=()
+        for p in $ssh_pids $dropbear_pids; do
+            if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
+                all_pids+=("$p")
             fi
+        done
+
+        total=${#all_pids[@]}
+        if [[ "$total" -gt "$limit" ]]; then
+            surplus=$((total - limit))
+            echo -e " ${C_YELLOW}● ${u}:${C_RESET} $total activas vs $limit permitidas."
+            echo -e "   Expulsando $surplus conexión(es) excedente(s)..."
+
+            pids_csv=$(IFS=,; echo "${all_pids[*]}")
+            ranked=()
+            while read -r r_pid _; do
+                if [[ -n "$r_pid" && "$r_pid" =~ ^[0-9]+$ ]]; then
+                    ranked+=("$r_pid")
+                fi
+            done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=-etimes 2>/dev/null || true)
+
+            if [[ ${#ranked[@]} -eq 0 ]]; then
+                ranked=("${all_pids[@]}")
+            fi
+
+            for (( i=limit; i<${#ranked[@]}; i++ )); do
+                kill -9 "${ranked[i]}" 2>/dev/null || true
+                KILLED_COUNT=$((KILLED_COUNT + 1))
+            done
         fi
     done < "$PASSWD_FILE"
 
-    echo -e "${C_GREEN}✔ Mitigación manual completada.${C_RESET} Total de sesiones excedentes cerradas: ${C_BOLD}$KILLED_COUNT${C_RESET}"
+    echo -e "\n${C_GRAY}─────────────────────────────────────────${C_RESET}"
+    echo -e "${C_GREEN}✔ Mitigación completada.${C_RESET} Total cerradas: ${C_BOLD}$KILLED_COUNT${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     exit 0
 fi
 
