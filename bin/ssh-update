@@ -5,7 +5,7 @@
 # ==============================================================================
 set -euo pipefail
 
-CURRENT_VERSION="1.8.5"
+CURRENT_VERSION="1.8.6"
 VERSION_FILE="/etc/vps-ssh-limiter/version"
 if [[ -f "$VERSION_FILE" ]]; then
     CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
@@ -16,7 +16,10 @@ if [[ -t 1 ]]; then
     C_RED="\033[1;31m"
     C_GREEN="\033[1;32m"
     C_YELLOW="\033[1;33m"
+    C_BLUE="\033[1;34m"
+    C_MAGENTA="\033[1;35m"
     C_CYAN="\033[1;36m"
+    C_WHITE="\033[1;37m"
     C_BOLD="\033[1m"
     C_GRAY="\033[0;90m"
 else
@@ -24,7 +27,10 @@ else
     C_RED=""
     C_GREEN=""
     C_YELLOW=""
+    C_BLUE=""
+    C_MAGENTA=""
     C_CYAN=""
+    C_WHITE=""
     C_BOLD=""
     C_GRAY=""
 fi

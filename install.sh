@@ -19,6 +19,7 @@ if [[ -t 1 ]]; then
     C_CYAN="\033[1;36m"
     C_BOLD="\033[1m"
     C_GRAY="\033[0;90m"
+    C_WHITE="\033[1;37m"
 else
     C_RESET=""
     C_RED=""
@@ -28,6 +29,7 @@ else
     C_CYAN=""
     C_BOLD=""
     C_GRAY=""
+    C_WHITE=""
 fi
 
 log_info() {

@@ -107,66 +107,80 @@ generate_banner_text() {
 
     case "$t_id" in
         1)
-            # Plantilla 1: ★ INFORMACIÓN DE TU CUENTA ★ (Principal HTTP Custom)
+            # Plantilla 1: ★ INFORMACIÓN DE TU CUENTA ★ (HTML Pro HTTP Custom)
+            cat <<EOF
+<center><font color="#00E5FF"><b>╔═══════════════════════════════════╗</b></font><br>
+<font color="#FFD700"><b>★ INFORMACIÓN DE TU CUENTA ★</b></font><br>
+<font color="#00E5FF"><b>╚═══════════════════════════════════╝</b></font></center><br>
+<font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} (Alta Velocidad)</font><br>
+<font color="#39FF14">● <b>Estado:</b></font> <font color="#39FF14"><b>ACTIVO Y OPTIMIZADO</b></font><br>
+<font color="#39FF14">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
+<font color="#39FF14">● <b>Tráfico VPS:</b></font> <font color="#FF00FF"><b>${traffic_disp} Transferidos</b></font><br>
+<font color="#39FF14">● <b>Conexiones:</b></font> <font color="#00E5FF">1 a 2 Dispositivos</font><br>
+<font color="#39FF14">● <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
+<font color="#888888">─────────────────────────────────────</font><br>
+<center><font color="#FF3366">⚠️ <b>Prohibido Torrent, SPAM y Multi-Login</b></font><br>
+<font color="#00E5FF"><b>★ Conexión Estable y de Alta Calidad ★</b></font></center>
+EOF
+            ;;
+        2)
+            # Plantilla 2: ★ VIP GOLD PREMIUM ★ (HTML Neón Dorado)
+            cat <<EOF
+<center><font color="#FFD700"><b>★ ★ ★ ${s_name} VIP NETWORK ★ ★ ★</b></font><br>
+<font color="#FFA500"><b>─────────────────────────────────────</b></font></center><br>
+<font color="#FFD700">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} VIP</font><br>
+<font color="#FFD700">● <b>Estado:</b></font> <font color="#39FF14"><b>CONECTADO / VIP ULTRA</b></font><br>
+<font color="#FFD700">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
+<font color="#FFD700">● <b>Tráfico VPS:</b></font> <font color="#39FF14"><b>${traffic_disp}</b></font><br>
+<font color="#FFD700">● <b>Contacto:</b></font> <font color="#00E5FF"><b>${c_info}</b></font><br>
+<font color="#FFA500">─────────────────────────────────────</font><br>
+<center><font color="#FF4444">⚠️ <b>Prohibido Descargas Torrent y Abusos</b></font><br>
+<font color="#FFD700"><b>★ Servicio Exclusivo de Alta Velocidad ★</b></font></center>
+EOF
+            ;;
+        3)
+            # Plantilla 3: 🎮 GAMING LOW-PING PRO 🎮 (HTML Gamer)
+            cat <<EOF
+<center><font color="#39FF14"><b>🎮 ${s_name} GAMING LOW-PING PRO 🎮</b></font><br>
+<font color="#00FFCC"><b>─────────────────────────────────────</b></font></center><br>
+<font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} Low-Latency</font><br>
+<font color="#39FF14">● <b>Perfil:</b></font> <font color="#00E5FF">Free Fire / PUBG / COD / Streaming</font><br>
+<font color="#39FF14">● <b>TCP BBR:</b></font> <font color="#39FF14"><b>ACTIVO (Anti-Lag)</b></font><br>
+<font color="#39FF14">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
+<font color="#39FF14">● <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
+<font color="#00FFCC">─────────────────────────────────────</font><br>
+<center><font color="#FF3333">⚠️ <b>Prohibido Torrent, P2P y Multi-Login</b></font><br>
+<font color="#39FF14"><b>★ Máxima Velocidad y Menor Latencia ★</b></font></center>
+EOF
+            ;;
+        4)
+            # Plantilla 4: ⚡ CYBERPUNK NEON ⚡ (HTML Neón Rosa/Cyan)
+            cat <<EOF
+<center><font color="#FF007F"><b>⚡ ${s_name} CYBERPUNK HIGH SPEED ⚡</b></font><br>
+<font color="#00F0FF"><b>═════════════════════════════════════</b></font></center><br>
+<font color="#00F0FF">► <b>Host:</b></font> <font color="#FFFFFF">${s_name}</font><br>
+<font color="#00F0FF">► <b>Protocolo:</b></font> <font color="#39FF14">SSH WebSocket (Puerto 80)</font><br>
+<font color="#00F0FF">► <b>Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
+<font color="#00F0FF">► <b>Datos:</b></font> <font color="#FF007F"><b>${traffic_disp} Transferidos</b></font><br>
+<font color="#00F0FF">► <b>Contacto:</b></font> <font color="#FFFF00"><b>${c_info}</b></font><br>
+<font color="#00F0FF">═════════════════════════════════════</font><br>
+<center><font color="#FF0055">⛔ <b>No Torrent | No Spam | No DDoS</b></font><br>
+<font color="#00F0FF"><b>★ Conexión Cifrada y Segura ★</b></font></center>
+EOF
+            ;;
+        5)
+            # Plantilla 5: 📱 TEXTO PLANO MÓVIL (Sin HTML)
             cat <<EOF
 ╔═══════════════════════════════════════╗
 ║     ★ INFORMACIÓN DE TU CUENTA ★      ║
 ╚═══════════════════════════════════════╝
-  ● Servidor     : ${s_name} (Alta Velocidad)
+  ● Servidor     : ${s_name} (SSH / WS)
   ● Estado       : ACTIVO Y OPTIMIZADO
   ● Fecha / Hora : ${now_date}
-  ● Tráfico VPS  : ${traffic_disp} Transferidos
-  ● Conexiones   : 1 a 2 Dispositivos
+  ● Tráfico VPS  : ${traffic_disp}
   ● Contacto     : ${c_info}
 ─────────────────────────────────────────
  ⚠️ Prohibido Torrent, Spam y Multi-Login
-─────────────────────────────────────────
- ★ Conexión Estable y de Alta Calidad ★
-═════════════════════════════════════════
-EOF
-            ;;
-        2)
-            # Plantilla 2: ★ VIP Gold Móvil ★
-            cat <<EOF
-╔═══════════════════════════════════════╗
-║       ★ ★ ★ ${s_name} VIP ★ ★ ★       ║
-╚═══════════════════════════════════════╝
-  ● Servidor     : ${s_name} VIP Network
-  ● Estado       : ACTIVO Y OPTIMIZADO
-  ● Fecha / Hora : ${now_date}
-  ● Contacto     : ${c_info}
-─────────────────────────────────────────
- ⚠️ Prohibido descargas Torrent y Spam
-═════════════════════════════════════════
-EOF
-            ;;
-        3)
-            # Plantilla 3: 🔹 Clean Minimal Móvil 🔹
-            cat <<EOF
-┌───────────────────────────────────────┐
-│     ★ INFORMACIÓN DE TU CUENTA ★      │
-└───────────────────────────────────────┘
-  Servidor     : ${s_name} (SSH / WS)
-  Estado       : ACTIVO Y OPTIMIZADO
-  Fecha / Hora : ${now_date}
-  Contacto     : ${c_info}
-─────────────────────────────────────────
- ⚠️ Prohibido Torrent, Spam y Abusos
-─────────────────────────────────────────
-EOF
-            ;;
-        4)
-            # Plantilla 4: 🎮 Gaming & Low-Lag Móvil 🎮
-            cat <<EOF
-╔═══════════════════════════════════════╗
-║     🎮 ${s_name} GAMING PRO 🎮        ║
-╚═══════════════════════════════════════╝
-  ● Servidor     : ${s_name} Low-Latency
-  ● Estado       : ACTIVO Y OPTIMIZADO
-  ● Fecha / Hora : ${now_date}
-  ● Contacto     : ${c_info}
-─────────────────────────────────────────
- ⚠️ Prohibido Torrent, P2P y Multi-Login
 ═════════════════════════════════════════
 EOF
             ;;
@@ -344,20 +358,58 @@ EOF
 # ------------------------------------------------------------------------------
 # Previsualización del Banner
 # ------------------------------------------------------------------------------
+render_simulated_html() {
+    local text="$1"
+    local sim
+    sim=$(echo "$text" | sed \
+        -e 's|<center>||g' -e 's|</center>||g' \
+        -e 's|<b>|\o033[1m|g' -e 's|</b>|\o033[0m|g' \
+        -e 's|<i>|\o033[3m|g' -e 's|</i>|\o033[0m|g' \
+        -e 's|<font color="#00E5FF">|\o033[1;36m|g' \
+        -e 's|<font color="#00F0FF">|\o033[1;36m|g' \
+        -e 's|<font color="#00FFCC">|\o033[1;36m|g' \
+        -e 's|<font color="#00ffea">|\o033[1;36m|g' \
+        -e 's|<font color="#FFD700">|\o033[1;33m|g' \
+        -e 's|<font color="#FFA500">|\o033[1;33m|g' \
+        -e 's|<font color="#FFFF00">|\o033[1;33m|g' \
+        -e 's|<font color="#39FF14">|\o033[1;32m|g' \
+        -e 's|<font color="#00FF00">|\o033[1;32m|g' \
+        -e 's|<font color="#FF3366">|\o033[1;31m|g' \
+        -e 's|<font color="#FF4444">|\o033[1;31m|g' \
+        -e 's|<font color="#FF0055">|\o033[1;31m|g' \
+        -e 's|<font color="#FF3333">|\o033[1;31m|g' \
+        -e 's|<font color="#FF007F">|\o033[1;35m|g' \
+        -e 's|<font color="#FF00FF">|\o033[1;35m|g' \
+        -e 's|<font color="#FFFFFF">|\o033[1;37m|g' \
+        -e 's|<font color="#888888">|\o033[0;90m|g' \
+        -e 's|</font>|\o033[0m|g' \
+        -e 's|<br>||g')
+    echo -e "$sim"
+}
+
+# ------------------------------------------------------------------------------
+# Previsualización del Banner
+# ------------------------------------------------------------------------------
 preview_banner() {
     load_banner_conf
     clear
     echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}REGISTRO HTTP CUSTOM (MÓVIL)${C_RESET}      ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}REGISTRO HTTP CUSTOM (HTML)       ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "${C_GRAY}Así verán el mensaje tus usuarios en la app:${C_RESET}\n"
+    local raw_banner=""
     if [[ -f "$BANNER_FILE" && -s "$BANNER_FILE" ]]; then
-        cat "$BANNER_FILE"
+        raw_banner=$(cat "$BANNER_FILE")
     else
-        generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES"
+        raw_banner=$(generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES")
     fi
-    echo ""
+
+    echo -e "${C_BOLD}${C_YELLOW}📱 VISTA PREVIA (En la app HTTP Custom):${C_RESET}\n"
+    render_simulated_html "$raw_banner"
+    echo -e "\n${C_GRAY}─────────────────────────────────────────${C_RESET}"
+    echo -e "${C_CYAN}${C_BOLD}📝 CÓDIGO HTML REGISTRADO EN EL BANNER:${C_RESET}\n"
+    echo -e "${C_GRAY}${raw_banner}${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
     press_enter
 }
@@ -372,19 +424,21 @@ select_template() {
     echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}PLANTILLAS PARA HTTP CUSTOM${C_RESET}       ${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "  ${C_YELLOW}[1] ★ Info de Cuenta (Recomendado)${C_RESET}"
-    echo -e "      • Servidor, estado, fecha y tel. 3826432180."
-    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Móvil${C_RESET}"
-    echo -e "      • Estrellas VIP y contacto telefónico."
-    echo -e "  ${C_YELLOW}[3] 🔹 Clean Minimal Móvil${C_RESET}"
-    echo -e "      • Diseño compacto y ultra-limpio."
-    echo -e "  ${C_YELLOW}[4] 🎮 Gaming & Low-Lag Móvil${C_RESET}"
-    echo -e "      • Perfil para juegos y baja latencia."
+    echo -e "  ${C_YELLOW}[1] ★ Info de Cuenta (HTML Pro - Recomendado)${C_RESET}"
+    echo -e "      • Cuadro de cuenta, servidor, estado y tel. 3826432180."
+    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Móvil (HTML Neón Dorado)${C_RESET}"
+    echo -e "      • Estrellas doradas VIP y contacto telefónico."
+    echo -e "  ${C_YELLOW}[3] 🎮 Gaming & Low-Lag (HTML Gamer Neón)${C_RESET}"
+    echo -e "      • Perfil optimizado para juegos y anti-lag."
+    echo -e "  ${C_YELLOW}[4] ⚡ Cyberpunk Pro (HTML Rosa/Cyan Neón)${C_RESET}"
+    echo -e "      • Estilo tecnológico de alta velocidad."
+    echo -e "  ${C_YELLOW}[5] 📱 Texto Plano Móvil (Sin etiquetas HTML)${C_RESET}"
+    echo -e "      • Compatible con terminales clásicas."
     echo -e "  ${C_RED}[0] Cancelar${C_RESET}\n"
 
     local opt_t=""
-    read -r -p "Selecciona una plantilla [0-4]: " opt_t || true
-    if [[ "$opt_t" =~ ^[1-4]$ ]]; then
+    read -r -p "Selecciona una plantilla [0-5]: " opt_t || true
+    if [[ "$opt_t" =~ ^[1-5]$ ]]; then
         TEMPLATE_ID="$opt_t"
         save_banner_conf
         apply_banner_system
@@ -501,12 +555,13 @@ main_banner_menu() {
             d_status="${C_RED}[DESACTIVADO]${C_RESET}"
         fi
 
-        local t_label="Información de Cuenta (Móvil)"
+        local t_label="Info de Cuenta (HTML)"
         case "$TEMPLATE_ID" in
-            2) t_label="VIP Gold (Móvil)" ;;
-            3) t_label="Clean Minimal (Móvil)" ;;
-            4) t_label="Gaming Pro (Móvil)" ;;
-            5) t_label="Personalizado" ;;
+            2) t_label="VIP Gold (HTML)" ;;
+            3) t_label="Gaming Pro (HTML)" ;;
+            4) t_label="Cyberpunk (HTML)" ;;
+            5) t_label="Texto Plano" ;;
+            6) t_label="Personalizado" ;;
         esac
 
         echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"

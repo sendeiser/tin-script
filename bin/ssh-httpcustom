@@ -16,6 +16,7 @@ if [[ -t 1 ]]; then
     C_BOLD="\033[1m"
     C_GRAY="\033[0;90m"
     C_MAGENTA="\033[1;35m"
+    C_WHITE="\033[1;37m"
 else
     C_RESET=""
     C_RED=""
@@ -26,6 +27,7 @@ else
     C_BOLD=""
     C_GRAY=""
     C_MAGENTA=""
+    C_WHITE=""
 fi
 
 get_server_ip() {
