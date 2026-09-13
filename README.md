@@ -59,13 +59,13 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.martinvps.online  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.8.2 - ACTUALIZADO]
+ Versión: [v1.8.3 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
- CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
+ CUENTAS:    Total: 12  |  Online: 5  |  Expiradas: 1  |  Tráfico VPS: 4.82 GB
 ══════════════════════════════════════════════════════════════════════════════
  [1] ► GESTIÓN DE USUARIOS    (Crear, Renovar, Modificar, Bloquear, Eliminar)
- [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Modo dinámico en tiempo real)
+ [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Tráfico de datos y conexiones)
  [3] ► BANNERS Y BIENVENIDA   (Mensajes en apps, plantillas, días y límites)
  [4] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
  [5] ► PROTOCOLOS Y PUERTOS   (Dropbear, WebSocket Proxy 80, Reiniciar SSH)
@@ -192,7 +192,8 @@ Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automát
 🚪 *Puerto OpenSSH:* 22
 👤 *Usuario:* juan
 🔑 *Contraseña:* clave123
-📅 *Vencimiento:* 2026-10-12
+📅 *Vencimiento:* 2026-10-12 (30 día(s) restantes)
+📊 *Datos Usados:* 342.5 MB
 📱 *Límite de Conexiones:* 2 dispositivo(s)
 📞 *Contacto / Soporte:* 3826432180
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -214,7 +215,7 @@ El sistema incluye un módulo completo de **Banners y Mensajes Informativos 100%
 ### 1. Funcionalidades del Módulo de Banners:
 - **Banner Pre-Auth en Apps (Ancho 41 cols):** Se muestra perfectamente encuadrado en el registro (log) de conexión de HTTP Custom nada más pulsar *Connect*.
 - **Plantillas Estilizadas Móviles (41 columnas):**
-  - `[1] ⚡ Neon Cyber Móvil (Hacker Pro)`: Bordes dobles compactos, estado online, reglas de bloqueo y teléfono.
+  - `[1] ★ Información de Cuenta (HTTP Custom Móvil)`: Cuadro de cuenta, servidor, estado, fecha/hora, tráfico total y teléfono `3826432180`.
   - `[2] ★ VIP Gold Móvil (Elegante)`: Enfoque comercial con estrellas doradas y contacto oficial.
   - `[3] 🔹 Clean Minimal Móvil`: Diseño compacto y de máxima legibilidad en cualquier smartphone.
   - `[4] 🎮 Gaming & Low-Lag Móvil`: Optimizado para juegos online (Free Fire/PUBG/COD) y ping bajo.
@@ -223,6 +224,7 @@ El sistema incluye un módulo completo de **Banners y Mensajes Informativos 100%
   Calcula y muestra en tiempo real al conectarse el usuario:
   - 👤 **Nombre de usuario:** `$USER`
   - 📅 **Fecha de vencimiento y días restantes:** Formateado automáticamente
+  - 📊 **Consumo de datos de internet:** En MB / GB acumulados y en vivo
   - 📱 **Cuota de conexiones activas:** `X de Y dispositivos permitidos`
   - 🚀 **Estado de la cuenta:** `ACTIVO Y OPTIMIZADO`
   - 🕒 **Fecha y hora del servidor:** En tiempo real (`DD/MM/AAAA HH:MM`)
@@ -465,11 +467,11 @@ sudo ssh-userdel <usuario>
 
 ### `ssh-online`
 
-Muestra una tabla con el estado de todos los usuarios registrados, sus conexiones SSH y Dropbear en vivo, límites configurados y estado de expiración:
+Muestra una tabla en tiempo real con el estado de todos los usuarios registrados, conexiones SSH y Dropbear en vivo, consumo de datos de internet (`DATOS USADOS`), límites de cuota, fecha de expiración y tráfico total acumulado del servidor:
 
 ```bash
 ssh-online
-# O en formato JSON para bots y paneles web:
+# O en formato JSON para bots y paneles web (incluye bytes de tráfico por usuario y servidor):
 ssh-online --json
 ```
 

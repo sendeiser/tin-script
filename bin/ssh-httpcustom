@@ -75,11 +75,23 @@ show_client_card() {
 
     # Expiración y límite desde el sistema
     local exp_date="Indefinido"
+    local days_left="Ilimitado"
     if command -v chage >/dev/null 2>&1; then
         local raw_exp
         raw_exp=$(chage -l "$user" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
         if [[ -n "$raw_exp" && "$raw_exp" != "never" && "$raw_exp" != "nunca" ]]; then
-            exp_date=$(date -d "$raw_exp" +%Y-%m-%d 2>/dev/null || echo "$raw_exp")
+            local exp_epoch now_epoch
+            exp_epoch=$(date -d "$raw_exp" +%s 2>/dev/null || true)
+            now_epoch=$(date +%s)
+            if [[ -n "$exp_epoch" ]]; then
+                exp_date=$(date -d "@$exp_epoch" +%Y-%m-%d 2>/dev/null || echo "$raw_exp")
+                local diff=$(( (exp_epoch - now_epoch) / 86400 ))
+                if [[ $diff -ge 0 ]]; then
+                    days_left="${diff} día(s)"
+                else
+                    days_left="EXPIRADO"
+                fi
+            fi
         fi
     fi
 
@@ -88,6 +100,36 @@ show_client_card() {
     gecos_line=$(grep "^${user}:" /etc/passwd 2>/dev/null || true)
     if [[ "$gecos_line" =~ LIM[:_=-]?([0-9]+) ]]; then
         limit_conn="${BASH_REMATCH[1]}"
+    fi
+
+    # Consumo de datos del usuario
+    local u_bytes=0
+    if [[ -f /etc/vps-ssh-limiter/traffic.db ]]; then
+        local t_line
+        t_line=$(grep "^${user}:" /etc/vps-ssh-limiter/traffic.db 2>/dev/null | head -n1 || true)
+        if [[ -n "$t_line" ]]; then
+            u_bytes=$(echo "$t_line" | cut -d: -f2 || echo 0)
+        fi
+    fi
+    local pids
+    pids=$(pgrep -u "$user" 2>/dev/null || true)
+    for p in $pids; do
+        if [[ -r "/proc/$p/io" ]]; then
+            local r_b w_b
+            r_b=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+            w_b=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+            u_bytes=$(( u_bytes + r_b + w_b ))
+        fi
+    done
+    local traffic_str="0 B"
+    if [[ $u_bytes -ge 1073741824 ]]; then
+        traffic_str=$(awk -v b="$u_bytes" 'BEGIN { printf "%.2f GB", b / 1073741824 }')
+    elif [[ $u_bytes -ge 1048576 ]]; then
+        traffic_str=$(awk -v b="$u_bytes" 'BEGIN { printf "%.2f MB", b / 1048576 }')
+    elif [[ $u_bytes -ge 1024 ]]; then
+        traffic_str=$(awk -v b="$u_bytes" 'BEGIN { printf "%.1f KB", b / 1024 }')
+    elif [[ $u_bytes -gt 0 ]]; then
+        traffic_str="${u_bytes} B"
     fi
 
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
@@ -108,7 +150,8 @@ show_client_card() {
     echo -e "🚪 *Puerto OpenSSH:* \`22\`"
     echo -e "👤 *Usuario:* \`${user}\`"
     echo -e "🔑 *Contraseña:* \`${pass}\`"
-    echo -e "📅 *Vencimiento:* \`${exp_date}\`"
+    echo -e "📅 *Vencimiento:* \`${exp_date}\` (${days_left} restantes)"
+    echo -e "📊 *Datos Usados:* \`${traffic_str}\`"
     echo -e "📱 *Límite de Conexiones:* \`${limit_conn} dispositivo(s)\`"
     echo -e "📞 *Contacto / Soporte:* \`3826432180\`"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

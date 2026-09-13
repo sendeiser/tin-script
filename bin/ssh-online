@@ -38,9 +38,10 @@ if [[ "$USE_COLOR" == true ]]; then
     C_YELLOW="\033[1;33m"
     C_BLUE="\033[1;34m"
     C_CYAN="\033[1;36m"
+    C_MAGENTA="\033[1;35m"
+    C_WHITE="\033[1;37m"
     C_BOLD="\033[1m"
     C_GRAY="\033[0;90m"
-    C_MAGENTA="\033[1;35m"
 else
     C_RESET=""
     C_RED=""
@@ -48,10 +49,71 @@ else
     C_YELLOW=""
     C_BLUE=""
     C_CYAN=""
+    C_MAGENTA=""
+    C_WHITE=""
     C_BOLD=""
     C_GRAY=""
-    C_MAGENTA=""
 fi
+# ------------------------------------------------------------------------------
+# Funciones de Medición y Formateo de Tráfico / Datos
+# ------------------------------------------------------------------------------
+format_bytes() {
+    local b="${1:-0}"
+    if [[ ! "$b" =~ ^[0-9]+$ ]] || [[ "$b" -le 0 ]]; then
+        echo "0 B"
+        return
+    fi
+    if [[ $b -ge 1073741824 ]]; then
+        awk -v b="$b" 'BEGIN { printf "%.2f GB", b / 1073741824 }'
+    elif [[ $b -ge 1048576 ]]; then
+        awk -v b="$b" 'BEGIN { printf "%.2f MB", b / 1048576 }'
+    elif [[ $b -ge 1024 ]]; then
+        awk -v b="$b" 'BEGIN { printf "%.1f KB", b / 1024 }'
+    else
+        echo "${b} B"
+    fi
+}
+
+get_user_traffic_bytes() {
+    local user="$1"
+    local db_file="/etc/vps-ssh-limiter/traffic.db"
+    local saved_bytes=0
+
+    if [[ -f "$db_file" ]]; then
+        local line
+        line=$(grep "^${user}:" "$db_file" 2>/dev/null | head -n1 || true)
+        if [[ -n "$line" ]]; then
+            saved_bytes=$(echo "$line" | cut -d: -f2 || echo 0)
+        fi
+    fi
+
+    local live_bytes=0
+    local pids
+    pids=$(pgrep -u "$user" 2>/dev/null || true)
+    for p in $pids; do
+        if [[ -r "/proc/$p/io" ]]; then
+            local r_b w_b
+            r_b=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+            w_b=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+            live_bytes=$(( live_bytes + r_b + w_b ))
+        fi
+    done
+
+    echo $(( saved_bytes + live_bytes ))
+}
+
+get_server_total_traffic_bytes() {
+    local rx=0 tx=0
+    if [[ -r /proc/net/dev ]]; then
+        while read -r iface rx_b _ _ _ _ _ _ _ tx_b _; do
+            if [[ "$iface" != "lo:" && "$iface" =~ :$ ]]; then
+                rx=$(( rx + rx_b ))
+                tx=$(( tx + tx_b ))
+            fi
+        done < /proc/net/dev
+    fi
+    echo $(( rx + tx ))
+}
 
 # ------------------------------------------------------------------------------
 # Función para contar procesos activos por usuario
@@ -137,6 +199,8 @@ if [[ "$JSON_OUTPUT" == true ]]; then
         read -r ssh_count dropbear_count < <(count_user_connections "$user")
         IFS='|' read -r exp_date is_exp < <(check_user_expiration "$user")
         total_conn=$((ssh_count + dropbear_count))
+        u_traffic=$(get_user_traffic_bytes "$user")
+        u_traffic_fmt=$(format_bytes "$u_traffic")
 
         status="OFFLINE"
         if [[ "$is_exp" == "SI" ]]; then
@@ -149,11 +213,13 @@ if [[ "$JSON_OUTPUT" == true ]]; then
             status="ACTIVO"
         fi
 
-        json_entries+=("{\"username\":\"$user\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"expiration\":\"$exp_date\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
+        json_entries+=("{\"username\":\"$user\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"traffic_bytes\":$u_traffic,\"traffic_formatted\":\"$u_traffic_fmt\",\"expiration\":\"$exp_date\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
     done
     
     joined=$(IFS=,; echo "${json_entries[*]}")
-    echo "{\"total_managed\":$TOTAL_MANAGED,\"timestamp\":\"$(date -Iseconds)\",\"users\":[$joined]}"
+    srv_traffic=$(get_server_total_traffic_bytes)
+    srv_traffic_fmt=$(format_bytes "$srv_traffic")
+    echo "{\"total_managed\":$TOTAL_MANAGED,\"timestamp\":\"$(date -Iseconds)\",\"server_traffic_bytes\":$srv_traffic,\"server_traffic_formatted\":\"$srv_traffic_fmt\",\"users\":[$joined]}"
     exit 0
 fi
 
@@ -161,7 +227,7 @@ fi
 # Encabezado visual de la tabla
 # ------------------------------------------------------------------------------
 echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}       VPS-SSH-LIMITER :: MONITOR DE CONEXIONES EN TIEMPO REAL          ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}    VPS-SSH-LIMITER :: MONITOR DE CONEXIONES Y CONSUMO DE DATOS     ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
 echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
 
 if [[ $TOTAL_MANAGED -eq 0 ]]; then
@@ -170,8 +236,8 @@ if [[ $TOTAL_MANAGED -eq 0 ]]; then
     exit 0
 fi
 
-printf " ${C_BOLD}%-18s %-7s %-10s %-8s %-9s %-13s %-20s${C_RESET}\n" \
-    "USUARIO" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "EXPIRACIÓN" "ESTADO"
+printf " ${C_BOLD}%-16s %-5s %-9s %-6s %-7s %-12s %-12s %-20s${C_RESET}\n" \
+    "USUARIO" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "DATOS USADOS" "EXPIRACIÓN" "ESTADO"
 echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
 
 ONLINE_USERS=0
@@ -186,6 +252,8 @@ for entry in "${USERS_LIST[@]}"; do
     read -r ssh_count dropbear_count < <(count_user_connections "$user")
     IFS='|' read -r exp_date is_exp < <(check_user_expiration "$user")
     total_conn=$((ssh_count + dropbear_count))
+    u_bytes=$(get_user_traffic_bytes "$user")
+    u_traffic_str=$(format_bytes "$u_bytes")
 
     TOTAL_SSH_CONN=$((TOTAL_SSH_CONN + ssh_count))
     TOTAL_DROPBEAR_CONN=$((TOTAL_DROPBEAR_CONN + dropbear_count))
@@ -215,19 +283,23 @@ for entry in "${USERS_LIST[@]}"; do
         user_color="${C_WHITE}"
     fi
 
-    printf " ${user_color}%-18s${C_RESET} %-7d %-10d %-8d %-9s %-13s %b\n" \
+    printf " ${user_color}%-16s${C_RESET} %-5d %-9d %-6d %-7s %-12s %-12s %b\n" \
         "$user" \
         "$ssh_count" \
         "$dropbear_count" \
         "$total_conn" \
         "$quota_str" \
+        "$u_traffic_str" \
         "$exp_date" \
         "$status_label"
 done
 
+srv_total_bytes=$(get_server_total_traffic_bytes)
+srv_total_str=$(format_bytes "$srv_total_bytes")
+
 echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
-printf " ${C_BOLD}%-15s${C_RESET} ${C_CYAN}%d${C_RESET}  |  ${C_BOLD}Online:${C_RESET} ${C_GREEN}%d${C_RESET}  |  ${C_BOLD}Conexiones:${C_RESET} SSH: ${C_YELLOW}%d${C_RESET} | Dropbear: ${C_YELLOW}%d${C_RESET} | Total: ${C_BOLD}${C_GREEN}%d${C_RESET}\n" \
-    "Registrados:" "$TOTAL_MANAGED" "$ONLINE_USERS" "$TOTAL_SSH_CONN" "$TOTAL_DROPBEAR_CONN" "$TOTAL_ALL_CONN"
+printf " ${C_BOLD}%-13s${C_RESET} ${C_CYAN}%d${C_RESET} | ${C_BOLD}Online:${C_RESET} ${C_GREEN}%d${C_RESET} | ${C_BOLD}Conexiones:${C_RESET} ${C_YELLOW}%d${C_RESET} | ${C_BOLD}Tráfico Total Servidor:${C_RESET} ${C_BOLD}${C_GREEN}%s${C_RESET}\n" \
+    "Registrados:" "$TOTAL_MANAGED" "$ONLINE_USERS" "$TOTAL_ALL_CONN" "$srv_total_str"
 echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
 
 exit 0

@@ -212,7 +212,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.8.2"
+    local current_ver="1.8.3"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -232,6 +232,25 @@ draw_dashboard() {
         host_line="${C_BOLD}IP Pública:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
     fi
 
+    local srv_total_b=0 srv_total_fmt="0 B"
+    if [[ -r /proc/net/dev ]]; then
+        local rx=0 tx=0
+        while read -r iface rx_b _ _ _ _ _ _ _ tx_b _; do
+            if [[ "$iface" != "lo:" && "$iface" =~ :$ ]]; then
+                rx=$(( rx + rx_b ))
+                tx=$(( tx + tx_b ))
+            fi
+        done < /proc/net/dev
+        srv_total_b=$(( rx + tx ))
+        if [[ $srv_total_b -ge 1073741824 ]]; then
+            srv_total_fmt=$(awk -v b="$srv_total_b" 'BEGIN { printf "%.2f GB", b / 1073741824 }')
+        elif [[ $srv_total_b -ge 1048576 ]]; then
+            srv_total_fmt=$(awk -v b="$srv_total_b" 'BEGIN { printf "%.2f MB", b / 1048576 }')
+        elif [[ $srv_total_b -ge 1024 ]]; then
+            srv_total_fmt=$(awk -v b="$srv_total_b" 'BEGIN { printf "%.1f KB", b / 1024 }')
+        fi
+    fi
+
     local ver_badge="${C_GREEN}[v${current_ver} - ACTUALIZADO]${C_RESET}"
     local opt_9_txt="${C_BOLD}${C_YELLOW}[9]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
 
@@ -249,10 +268,10 @@ draw_dashboard() {
     echo -e " ${C_BOLD}Versión:${C_RESET} ${ver_badge}"
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
     echo -e " ${C_BOLD}SERVICIOS:${C_RESET}  SSH: ${s_ssh}  Dropbear: ${s_drop}  WS(80): ${s_ws}  Limitador: ${s_lim}"
-    echo -e " ${C_BOLD}CUENTAS:${C_RESET}    Total: ${C_BOLD}${u_total}${C_RESET}     |  Online: ${C_GREEN}${u_online}${C_RESET}     |  Expiradas: ${C_RED}${u_exp}${C_RESET}"
+    echo -e " ${C_BOLD}CUENTAS:${C_RESET}    Total: ${C_BOLD}${u_total}${C_RESET}  |  Online: ${C_GREEN}${u_online}${C_RESET}  |  Expiradas: ${C_RED}${u_exp}${C_RESET}  |  Tráfico VPS: ${C_BOLD}${C_GREEN}${srv_total_fmt}${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[1]${C_RESET}  ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}    ${C_GRAY}(Crear, Renovar, Modificar, Bloquear, Eliminar)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[2]${C_RESET}  ${C_BOLD}► MONITOR DE CONEXIONES${C_RESET}  ${C_GRAY}(Tabla en vivo, Modo dinámico en tiempo real)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[2]${C_RESET}  ${C_BOLD}► MONITOR DE CONEXIONES${C_RESET}  ${C_GRAY}(Tabla en vivo, Tráfico de datos y conexiones)${C_RESET}"
     echo -e " ${C_BOLD}${C_GREEN}[3]${C_RESET}  ${C_BOLD}${C_GREEN}► BANNERS Y BIENVENIDA${C_RESET}   ${C_GRAY}(Mensajes en apps, plantillas, días y límites)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET}  ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET}  ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Dropbear, WebSocket Proxy 80, Reiniciar SSH)${C_RESET}"
@@ -420,9 +439,9 @@ menu_monitor() {
     while true; do
         clear
         echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}               MONITOREO DE CONEXIONES EN VIVO                 ${C_RESET}${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}        MONITOREO DE CONEXIONES Y CONSUMO DE DATOS EN VIVO      ${C_RESET}${C_CYAN}║${C_RESET}"
         echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Ver tabla de conexiones en tiempo real (ssh-online)"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} Ver tabla de conexiones y consumo de datos (ssh-online)"
         echo -e "  ${C_YELLOW}[2]${C_RESET} Monitor dinámico continuo (Refresco automático cada 2s)"
         echo -e "  ${C_YELLOW}[3]${C_RESET} Expulsar todas las conexiones excedentes ahora"
         echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"

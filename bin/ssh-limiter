@@ -98,6 +98,50 @@ terminate_pids_stepped() {
 }
 
 # ------------------------------------------------------------------------------
+# Contabilidad de Tráfico de Red y Consumo de Datos por Usuario
+# ------------------------------------------------------------------------------
+TRAFFIC_DB="/etc/vps-ssh-limiter/traffic.db"
+STATE_DIR="/run/vps-ssh-limiter/pids"
+mkdir -p "$STATE_DIR" "/etc/vps-ssh-limiter"
+
+track_pid_traffic() {
+    local user="$1"
+    local pid="$2"
+    if [[ -r "/proc/$pid/io" ]]; then
+        local rb wb cur_total
+        rb=$(awk '/rchar:/ {print $2}' "/proc/$pid/io" 2>/dev/null || echo 0)
+        wb=$(awk '/wchar:/ {print $2}' "/proc/$pid/io" 2>/dev/null || echo 0)
+        cur_total=$(( rb + wb ))
+        
+        local pid_file="${STATE_DIR}/${pid}"
+        local last_seen=0
+        if [[ -f "$pid_file" ]]; then
+            last_seen=$(cat "$pid_file" 2>/dev/null || echo 0)
+        fi
+
+        if [[ $cur_total -gt $last_seen ]]; then
+            local delta=$(( cur_total - last_seen ))
+            echo "$cur_total" > "$pid_file"
+
+            # Actualizar base de datos de tráfico persistente
+            local cur_user_bytes=0
+            if [[ -f "$TRAFFIC_DB" ]]; then
+                local u_line
+                u_line=$(grep "^${user}:" "$TRAFFIC_DB" 2>/dev/null | head -n1 || true)
+                if [[ -n "$u_line" ]]; then
+                    cur_user_bytes=$(echo "$u_line" | cut -d: -f2 || echo 0)
+                    sed -i "s|^${user}:.*|${user}:$(( cur_user_bytes + delta )):$(date +%s)|g" "$TRAFFIC_DB"
+                else
+                    echo "${user}:${delta}:$(date +%s)" >> "$TRAFFIC_DB"
+                fi
+            else
+                echo "${user}:${delta}:$(date +%s)" >> "$TRAFFIC_DB"
+            fi
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # Ciclo Principal de Inspección (Bajo impacto de CPU < 1%)
 # ------------------------------------------------------------------------------
 log_msg "INFO" "Demonio ssh-limiter iniciado. Intervalo: ${CHECK_INTERVAL}s, Gracia: ${GRACE_PERIOD}s"
@@ -124,11 +168,12 @@ while $RUNNING; do
             # 2. Dropbear bajo el UID del usuario
             dropbear_pids=$(pgrep -u "$username" -x "dropbear" 2>/dev/null || true)
 
-            # Unificar PIDs activos
+            # Unificar PIDs activos y registrar consumo de datos
             all_pids=()
             for p in $ssh_pids $dropbear_pids; do
                 if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
                     all_pids+=("$p")
+                    track_pid_traffic "$username" "$p"
                 fi
             done
 
