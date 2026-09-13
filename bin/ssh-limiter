@@ -177,15 +177,9 @@ while $RUNNING; do
         if [[ -n "$limit" ]]; then
             username="$u"
 
-            # Inspección directa sin tuberías complejas:
-            # 1. OpenSSH bajo el UID del usuario (procesos de sesión autenticada)
-            ssh_pids=$(pgrep -u "$username" -f "^sshd: $username@" 2>/dev/null || true)
-            # 2. Dropbear bajo el UID del usuario
-            dropbear_pids=$(pgrep -u "$username" -x "dropbear" 2>/dev/null || true)
-
-            # Unificar PIDs activos y registrar consumo de datos
+            # Inspección universal de todos los procesos activos bajo el UID del usuario
             all_pids=()
-            for p in $ssh_pids $dropbear_pids; do
+            for p in $(pgrep -u "$username" 2>/dev/null || true); do
                 if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
                     all_pids+=("$p")
                     track_pid_traffic "$username" "$p"

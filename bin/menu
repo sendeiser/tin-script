@@ -175,10 +175,9 @@ get_user_stats() {
 
             if [[ "$is_user" == true ]]; then
                 total=$((total + 1))
-                local spids dpids
-                spids=$(pgrep -u "$u" -f "^sshd: $u@" 2>/dev/null || true)
-                dpids=$(pgrep -u "$u" -x "dropbear" 2>/dev/null || true)
-                if [[ -n "$spids" || -n "$dpids" ]]; then
+                local user_pids
+                user_pids=$(pgrep -u "$u" 2>/dev/null || true)
+                if [[ -n "$user_pids" ]]; then
                     online=$((online + 1))
                 fi
 

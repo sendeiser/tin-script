@@ -81,11 +81,8 @@ if [[ "$TARGET" == "--all-exceeded" ]]; then
 
         [[ -z "$limit" ]] && continue
 
-        ssh_pids=$(pgrep -u "$u" -f "^sshd: $u@" 2>/dev/null || true)
-        dropbear_pids=$(pgrep -u "$u" -x "dropbear" 2>/dev/null || true)
-
         all_pids=()
-        for p in $ssh_pids $dropbear_pids; do
+        for p in $(pgrep -u "$u" 2>/dev/null || true); do
             if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
                 all_pids+=("$p")
             fi
@@ -129,15 +126,13 @@ if ! id "$USERNAME" >/dev/null 2>&1; then
     exit 1
 fi
 
-ssh_pids=$(pgrep -u "$USERNAME" -f "^sshd: $USERNAME@" 2>/dev/null || true)
-dropbear_pids=$(pgrep -u "$USERNAME" -x "dropbear" 2>/dev/null || true)
-
-count_before=0
-for p in $ssh_pids $dropbear_pids; do
+all_pids=()
+for p in $(pgrep -u "$USERNAME" 2>/dev/null || true); do
     if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
-        count_before=$((count_before + 1))
+        all_pids+=("$p")
     fi
 done
+count_before=${#all_pids[@]}
 
 if [[ $count_before -eq 0 ]]; then
     echo -e "${C_YELLOW}[AVISO]${C_RESET} El usuario '$USERNAME' no tiene conexiones activas actualmente."

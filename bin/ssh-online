@@ -81,29 +81,36 @@ format_bytes() {
 get_user_traffic_bytes() {
     local user="$1"
     local db_file="/etc/vps-ssh-limiter/traffic.db"
-    local saved_bytes=0
+    local total_bytes=0
 
     if [[ -f "$db_file" ]]; then
         local line
         line=$(grep "^${user}:" "$db_file" 2>/dev/null | head -n1 || true)
         if [[ -n "$line" ]]; then
-            saved_bytes=$(echo "$line" | cut -d: -f2 || echo 0)
+            total_bytes=$(echo "$line" | cut -d: -f2 || echo 0)
         fi
     fi
 
-    local live_bytes=0
-    local pids
-    pids=$(pgrep -u "$user" 2>/dev/null || true)
-    for p in $pids; do
+    # Sumar consumo no consolidado de procesos activos
+    for p in $(pgrep -u "$user" 2>/dev/null || true); do
+        [[ -z "$p" || ! "$p" =~ ^[0-9]+$ ]] && continue
         if [[ -r "/proc/$p/io" ]]; then
-            local r_b w_b
+            local r_b w_b cur_total last_seen=0
             r_b=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
             w_b=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
-            live_bytes=$(( live_bytes + r_b + w_b ))
+            cur_total=$(( r_b + w_b ))
+
+            local p_file="/run/vps-ssh-limiter/pids/${p}"
+            if [[ -f "$p_file" ]]; then
+                last_seen=$(cat "$p_file" 2>/dev/null || echo 0)
+            fi
+            if [[ $cur_total -gt $last_seen ]]; then
+                total_bytes=$(( total_bytes + (cur_total - last_seen) ))
+            fi
         fi
     done
 
-    echo $(( saved_bytes + live_bytes ))
+    echo "$total_bytes"
 }
 
 get_server_total_traffic_bytes() {
@@ -124,22 +131,21 @@ get_server_total_traffic_bytes() {
 # ------------------------------------------------------------------------------
 count_user_connections() {
     local user="$1"
-    local ssh_pids=""
-    local dropbear_pids=""
-
-    ssh_pids=$(pgrep -u "$user" -f "^sshd: $user@" 2>/dev/null || true)
-    dropbear_pids=$(pgrep -u "$user" -x "dropbear" 2>/dev/null || true)
-
     local ssh_count=0
     local dropbear_count=0
 
-    if [[ -n "$ssh_pids" ]]; then
-        ssh_count=$(echo "$ssh_pids" | wc -w)
-    fi
-
-    if [[ -n "$dropbear_pids" ]]; then
-        dropbear_count=$(echo "$dropbear_pids" | wc -w)
-    fi
+    for p in $(pgrep -u "$user" 2>/dev/null || true); do
+        [[ -z "$p" || ! "$p" =~ ^[0-9]+$ ]] && continue
+        local comm=""
+        if [[ -r "/proc/$p/comm" ]]; then
+            comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
+        fi
+        if [[ "$comm" == *"dropbear"* ]]; then
+            dropbear_count=$((dropbear_count + 1))
+        else
+            ssh_count=$((ssh_count + 1))
+        fi
+    done
 
     echo "$ssh_count $dropbear_count"
 }
