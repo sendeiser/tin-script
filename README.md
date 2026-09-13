@@ -59,15 +59,15 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.miservidor.com  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.5.0 - ACTUALIZADO]
+ Versión: [v1.6.0 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
- SERVICIOS:  OpenSSH: [ONLINE]   Dropbear: [ONLINE]   Limitador: [ONLINE]
+ SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
 ══════════════════════════════════════════════════════════════════════════════
  [1] ► GESTIÓN DE USUARIOS    (Crear, Renovar, Modificar, Bloquear, Eliminar)
  [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Modo dinámico en tiempo real)
  [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
- [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, Reiniciar SSH/Dropbear)
+ [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, WebSocket Proxy 80, Reiniciar)
  [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
  [6] ► GESTIÓN DE DOMINIO / HOST (Cloudflare API, DuckDNS, Dominio Gratis)
  [7] ► GUÍA & DATOS HTTP CUSTOM (Tutorial paso a paso, Payloads y Fichas)
@@ -99,6 +99,46 @@ dominio
 # O comando completo:
 ssh-domain
 ```
+
+---
+
+## ⚡ WebSocket Proxy en Puerto 80 (Cloudflare CDN / HTTP Custom)
+
+Para conectar mediante **HTTP Custom**, **HTTP Injector** u otras apps usando payloads con **`Upgrade: websocket`** y Cloudflare CDN:
+
+### 1. ¿Por qué es necesario el WebSocket Proxy en el puerto 80?
+Los servidores SSH como **Dropbear** u **OpenSSH** esperan una cabecera de protocolo nativa (`SSH-2.0...`). Si un cliente envía una petición HTTP (`GET / HTTP/1.1 ... Upgrade: websocket`), Dropbear o SSH cierran la conexión de inmediato reportando `Protocol mismatch`.
+El servicio **`ssh-wsproxy`** escucha en el **puerto 80**:
+1. Recibe la petición HTTP con el encabezado WebSocket.
+2. Devuelve automáticamente la respuesta esperada: `HTTP/1.1 101 Switching Protocols`.
+3. Establece un túnel TCP transparente bidireccional conectando directamente con el puerto interno de Dropbear (`127.0.0.1:143`).
+
+### 2. ¿Cómo funciona la arquitectura con Bug Host y Cloudflare?
+```text
+[Teléfono Móvil (HTTP Custom)]
+       │
+       ▼ (1) Envía Payload con Bug Host (rexo.personal.com.ar) y Upgrade: websocket
+[Antena / DPI del Operador] ──► Deja pasar el tráfico gratis en puerto 80 (Zero-Rating)
+       │
+       ▼ (2) Conecta a Cloudflare CDN (ej: woocommerce.everlytic.net:80)
+[Cloudflare Edge Anycast] ──► Lee 'Host: martin.supravps.shop'
+       │
+       ▼ (3) Reenvía WebSocket hacia la IP de tu VPS en puerto 80
+[Servidor VPS (ssh-wsproxy:80)] ──► Responde 101 Switching Protocols
+       │
+       ▼ (4) Entrega la sesión SSH localmente
+[Dropbear (127.0.0.1:143)] ──► ¡Sesión SSH Autenticada y Conectada!
+```
+
+### 3. Configuración en HTTP Custom:
+- **Server IP / Host:** Dominio CDN de Cloudflare con puerto `:80` (ej: `woocommerce.everlytic.net:80`).
+- **Casilla SSH:** Marcada (✔).
+- **Puerto SSH:** `80`.
+- **Payload:**
+  ```text
+  GET / HTTP/1.3[crlf]Host: rexo.personal.com.ar[crlf][crlf][crlf][split][crlf][split]GETT / HTTP/1.1[crlf]Host: martin.supravps.shop[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]
+  ```
+- **Usuario y Contraseña:** Los datos de la cuenta creada en tu VPS (`ssh-useradd`).
 
 ---
 
@@ -257,9 +297,11 @@ vps-ssh-limiter/
 │   ├── ssh-killuser        # CLI: Desconexión forzosa de sesiones por usuario o masiva
 │   ├── ssh-userdel         # CLI: Revocación forzosa y expulsión inmediata de procesos
 │   ├── ssh-online          # CLI: Monitor en tiempo real con tabla formateada y JSON
+│   ├── ssh-wsproxy         # CLI/Demonio: WebSocket Proxy puerto 80 hacia Dropbear (atajo: wsproxy)
 │   └── ssh-limiter         # Demonio de monitoreo y mitigación escalonada
 ├── systemd/
-│   └── ssh-limiter.service # Definición de unidad systemd para supervisión continua
+│   ├── ssh-limiter.service # Definición de unidad systemd para supervisión continua
+│   └── ssh-wsproxy.service # Definición de unidad systemd para WebSocket Proxy en puerto 80
 ├── install.sh              # Instalador y desinstalador automatizado desatendido
 ├── version                 # Archivo de control de versiones semver
 ├── LICENSE                 # Licencia MIT
@@ -426,6 +468,29 @@ ssh-httpcustom --guide
 
 # Ver ejemplos de Payloads (WebSocket, CDN, Direct, Proxy):
 ssh-httpcustom --payloads
+```
+
+---
+
+### `ssh-wsproxy` / `wsproxy`
+
+Proxy WebSocket de alto rendimiento en el **puerto 80**, diseñado para recibir peticiones `Upgrade: websocket` de Cloudflare CDN y HTTP Custom y reenviarlas hacia Dropbear (`127.0.0.1:143`):
+
+```bash
+# Ver estado del WebSocket Proxy y puertos:
+wsproxy --status
+
+# Iniciar el servicio en segundo plano (systemd):
+sudo wsproxy --start
+
+# Detener el servicio:
+sudo wsproxy --stop
+
+# Reiniciar el servicio:
+sudo wsproxy --restart
+
+# Ejecutar directamente en primer plano (escucha 80 -> destino 143):
+sudo wsproxy 80 127.0.0.1:143
 ```
 
 ---

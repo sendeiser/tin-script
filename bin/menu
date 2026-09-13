@@ -198,9 +198,10 @@ draw_dashboard() {
     disk_txt=$(get_disk_usage)
     uptime_txt=$(get_uptime_formatted)
 
-    local s_ssh s_drop s_lim
+    local s_ssh s_drop s_ws s_lim
     s_ssh=$(check_service_badge "ssh")
     s_drop=$(check_service_badge "dropbear")
+    s_ws=$(check_service_badge "ssh-wsproxy")
     s_lim=$(check_service_badge "ssh-limiter")
 
     local u_total=0 u_online=0 u_exp=0
@@ -211,7 +212,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.5.0"
+    local current_ver="1.6.0"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -247,7 +248,7 @@ draw_dashboard() {
     echo -e " ${C_BOLD}RAM:${C_RESET} ${C_CYAN}${ram_bar}${C_RESET} ${ram_txt}    ${C_BOLD}CPU:${C_RESET} ${cpu_load}"
     echo -e " ${C_BOLD}Versión:${C_RESET} ${ver_badge}"
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
-    echo -e " ${C_BOLD}SERVICIOS:${C_RESET}  OpenSSH: ${s_ssh}   Dropbear: ${s_drop}   Limitador: ${s_lim}"
+    echo -e " ${C_BOLD}SERVICIOS:${C_RESET}  SSH: ${s_ssh}  Dropbear: ${s_drop}  WS(80): ${s_ws}  Limitador: ${s_lim}"
     echo -e " ${C_BOLD}CUENTAS:${C_RESET}    Total: ${C_BOLD}${u_total}${C_RESET}     |  Online: ${C_GREEN}${u_online}${C_RESET}     |  Expiradas: ${C_RED}${u_exp}${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[1]${C_RESET} ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}    ${C_GRAY}(Crear, Renovar, Modificar, Bloquear, Eliminar)${C_RESET}"
@@ -523,8 +524,105 @@ menu_limiter() {
 }
 
 # ------------------------------------------------------------------------------
-# SUBMENÚ 4: PROTOCOLOS Y PUERTOS
+# SUBMENÚ 4: PROTOCOLOS Y PUERTOS (INCLUYE WEBSOCKET PROXY PUERTO 80)
 # ------------------------------------------------------------------------------
+menu_wsproxy() {
+    while true; do
+        clear
+        local ws_active="${C_RED}[DETENIDO]${C_RESET}"
+        if systemctl is-active --quiet ssh-wsproxy 2>/dev/null; then
+            ws_active="${C_GREEN}[EN EJECUCIÓN]${C_RESET}"
+        fi
+
+        local l_port="80" t_port="143"
+        if [[ -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
+            l_port=$(grep "^LISTEN_PORT=" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null | cut -d= -f2 || echo "80")
+            t_port=$(grep "^TARGET_PORT=" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null | cut -d= -f2 || echo "143")
+        fi
+
+        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}     WEBSOCKET PROXY (PUERTO 80 / HTTP CUSTOM / CLOUDFLARE)     ${C_RESET}${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
+        echo -e " Estado: ${ws_active}  |  Escucha: ${C_YELLOW}0.0.0.0:${l_port}${C_RESET} -> Destino: ${C_GREEN}127.0.0.1:${t_port}${C_RESET}"
+        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} Iniciar / Habilitar WebSocket Proxy (Puerto ${l_port})"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} Detener WebSocket Proxy"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} Reiniciar WebSocket Proxy"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} Cambiar puerto de escucha (actual: ${l_port})"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} Cambiar puerto de destino interno (actual: ${t_port})"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} Ver registros en vivo (journalctl -u ssh-wsproxy)"
+        echo -e "  ${C_RED}[0]${C_RESET} Volver al submenú de puertos"
+        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        local opt_ws=""
+        read -r -p "Seleccione una opción [0-6]: " opt_ws || true
+
+        case "${opt_ws:-}" in
+            1)
+                systemctl enable --now ssh-wsproxy 2>/dev/null || systemctl start ssh-wsproxy
+                echo -e "${C_GREEN}✔ WebSocket Proxy iniciado en el puerto ${l_port}.${C_RESET}"
+                sleep 1.5
+                ;;
+            2)
+                systemctl stop ssh-wsproxy
+                echo -e "${C_YELLOW}✔ WebSocket Proxy detenido.${C_RESET}"
+                sleep 1.5
+                ;;
+            3)
+                systemctl restart ssh-wsproxy
+                echo -e "${C_GREEN}✔ WebSocket Proxy reiniciado.${C_RESET}"
+                sleep 1.5
+                ;;
+            4)
+                echo -e "\n${C_CYAN}--- CONFIGURAR PUERTO DE ESCUCHA DE WEBSOCKET PROXY ---${C_RESET}"
+                echo -e "Puerto actual: ${C_YELLOW}${l_port}${C_RESET} (Recomendado para HTTP Custom / Cloudflare: 80)"
+                local new_lp=""
+                read -r -p "Nuevo puerto de escucha: " new_lp || true
+                if [[ -n "${new_lp:-}" && "$new_lp" =~ ^[0-9]+$ ]]; then
+                    mkdir -p /etc/vps-ssh-limiter
+                    cat > /etc/vps-ssh-limiter/wsproxy.conf <<EOF
+LISTEN_PORT=${new_lp}
+TARGET_HOST=127.0.0.1
+TARGET_PORT=${t_port}
+EOF
+                    systemctl restart ssh-wsproxy 2>/dev/null || true
+                    echo -e "${C_GREEN}✔ Puerto de escucha cambiado a ${new_lp} y servicio reiniciado.${C_RESET}"
+                fi
+                press_enter
+                ;;
+            5)
+                echo -e "\n${C_CYAN}--- CONFIGURAR PUERTO DESTINO (INTERNO) ---${C_RESET}"
+                echo -e "Puerto actual destino: ${C_GREEN}${t_port}${C_RESET} (143 = Dropbear, 22 = OpenSSH)"
+                local new_tp=""
+                read -r -p "Nuevo puerto destino (143 o 22): " new_tp || true
+                if [[ -n "${new_tp:-}" && "$new_tp" =~ ^[0-9]+$ ]]; then
+                    mkdir -p /etc/vps-ssh-limiter
+                    cat > /etc/vps-ssh-limiter/wsproxy.conf <<EOF
+LISTEN_PORT=${l_port}
+TARGET_HOST=127.0.0.1
+TARGET_PORT=${new_tp}
+EOF
+                    systemctl restart ssh-wsproxy 2>/dev/null || true
+                    echo -e "${C_GREEN}✔ Puerto destino cambiado a ${new_tp} y servicio reiniciado.${C_RESET}"
+                fi
+                press_enter
+                ;;
+            6)
+                clear
+                echo -e "${C_CYAN}Mostrando registros en vivo de ssh-wsproxy. Presione ${C_BOLD}[Ctrl+C]${C_RESET} para volver.${C_RESET}\n"
+                journalctl -u ssh-wsproxy -n 30 -f || true
+                press_enter
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${C_RED}Opción inválida.${C_RESET}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
 menu_ports() {
     while true; do
         clear
@@ -533,17 +631,18 @@ menu_ports() {
         echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
         echo -e "  ${C_YELLOW}[1]${C_RESET} Ver puertos activos (ss / netstat)"
         echo -e "  ${C_YELLOW}[2]${C_RESET} Configurar puertos de Dropbear"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Reiniciar servicio Dropbear"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} Reiniciar servicio OpenSSH"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} Administrar WebSocket Proxy (Puerto 80 para HTTP Custom / CDN)"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} Reiniciar servicio Dropbear"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} Reiniciar servicio OpenSSH"
         echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
         echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
         local opt_ports=""
-        read -r -p "Seleccione una opción [0-4]: " opt_ports || true
+        read -r -p "Seleccione una opción [0-5]: " opt_ports || true
 
         case "${opt_ports:-}" in
             1)
-                echo -e "\n${C_BOLD}Puertos en escucha para SSH y Dropbear:${C_RESET}\n"
-                ss -tulpn 2>/dev/null | grep -E 'sshd|dropbear' || netstat -tulpn 2>/dev/null | grep -E 'sshd|dropbear' || echo "No se detectaron puertos en escucha."
+                echo -e "\n${C_BOLD}Puertos en escucha para SSH, Dropbear y WebSocket:${C_RESET}\n"
+                ss -tulpn 2>/dev/null | grep -E 'sshd|dropbear|python|wsproxy' || netstat -tulpn 2>/dev/null | grep -E 'sshd|dropbear|python|wsproxy' || echo "No se detectaron puertos en escucha."
                 press_enter
                 ;;
             2)
@@ -569,11 +668,14 @@ menu_ports() {
                 press_enter
                 ;;
             3)
+                menu_wsproxy
+                ;;
+            4)
                 systemctl restart dropbear
                 echo -e "${C_GREEN}✔ Dropbear reiniciado correctamente.${C_RESET}"
                 sleep 1.5
                 ;;
-            4)
+            5)
                 systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
                 echo -e "${C_GREEN}✔ OpenSSH reiniciado correctamente.${C_RESET}"
                 sleep 1.5

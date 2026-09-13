@@ -104,6 +104,7 @@ show_client_card() {
         echo -e "🌐 *Host / IP:* \`${ip}\`"
     fi
     echo -e "🚪 *Puertos Dropbear:* \`${drop_ports}\` (Recomendados)"
+    echo -e "🚪 *Puerto WebSocket Proxy:* \`80\` (Para Payloads / CDN Cloudflare)"
     echo -e "🚪 *Puerto OpenSSH:* \`22\`"
     echo -e "👤 *Usuario:* \`${user}\`"
     echo -e "🔑 *Contraseña:* \`${pass}\`"
@@ -178,18 +179,23 @@ show_payloads() {
     echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}             EJEMPLOS DE PAYLOADS PARA HTTP CUSTOM              ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "${C_BOLD}1. WebSocket Estándar (Cloudflare / CDN / Direct):${C_RESET}"
+    echo -e "${C_BOLD}${C_YELLOW}1. WebSocket Cloudflare CDN + Bug Host & Split (Puerto 80):${C_RESET}"
+    echo -e "${C_GREEN}GET / HTTP/1.3[crlf]Host: bughost.com[crlf][crlf][crlf][split][crlf][split]GETT / HTTP/1.1[crlf]Host: tudominio.com[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]${C_RESET}"
+    echo -e "${C_CYAN}► Cómo funciona:${C_RESET}"
+    echo -e "  • ${C_BOLD}bughost.com:${C_RESET} Dominio zero-rated de tu operadora (ej: ${C_YELLOW}rexo.personal.com.ar${C_RESET} para Personal Argentina)."
+    echo -e "  • ${C_BOLD}tudominio.com:${C_RESET} Tu subdominio en Cloudflare con Proxy (Nube Naranja) hacia tu VPS."
+    echo -e "  • ${C_BOLD}Server IP / Host en la App:${C_RESET} Dominio CDN de Cloudflare con puerto ${C_BOLD}:80${C_RESET} (ej: ${C_YELLOW}woocommerce.everlytic.net:80${C_RESET})."
+    echo -e "  • ${C_BOLD}En tu VPS:${C_RESET} El demonio ${C_BOLD}ssh-wsproxy${C_RESET} atiende en el puerto 80 y reenvía el tráfico a Dropbear.\n"
+
+    echo -e "${C_BOLD}2. WebSocket Estándar (Cloudflare / Direct):${C_RESET}"
     echo -e "${C_GREEN}GET / HTTP/1.1[crlf]Host: [host_port][crlf]Upgrade: websocket[crlf]Connection: Keep-Alive[crlf][crlf]${C_RESET}\n"
 
-    echo -e "${C_BOLD}2. Payload HTTP Proxy con Bug Host (Reemplazar 'bughost.com'):${C_RESET}"
+    echo -e "${C_BOLD}3. Payload HTTP Proxy tradicional con Bug Host:${C_RESET}"
     echo -e "${C_GREEN}GET / HTTP/1.1[crlf]Host: bughost.com[crlf]X-Online-Host: bughost.com[crlf]Connection: Keep-Alive[crlf][crlf]${C_RESET}\n"
 
-    echo -e "${C_BOLD}3. Payload Doble CONNECT:${C_RESET}"
+    echo -e "${C_BOLD}4. Payload Doble CONNECT:${C_RESET}"
     echo -e "${C_GREEN}CONNECT [host_port] HTTP/1.1[crlf]Host: [host_port][crlf]Proxy-Connection: Keep-Alive[crlf][crlf]${C_RESET}\n"
 
-    echo -e "${C_BOLD}4. Payload POST Buffer Split:${C_RESET}"
-    echo -e "${C_GREEN}POST / HTTP/1.1[crlf]Host: [host_port][crlf]Content-Length: 0[crlf]Connection: Keep-Alive[crlf][crlf]${C_RESET}\n"
-    echo -e "${C_GRAY}Nota: Recuerda cambiar 'bughost.com' por el dominio con zero-rating de tu operadora móvil.${C_RESET}"
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
 }
 

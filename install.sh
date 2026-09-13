@@ -95,10 +95,17 @@ if [[ "${1:-}" == "--uninstall" ]]; then
         systemctl disable ssh-limiter 2>/dev/null || true
     fi
     
-    rm -f /etc/systemd/system/ssh-limiter.service
+    if systemctl is-active --quiet ssh-wsproxy 2>/dev/null; then
+        systemctl stop ssh-wsproxy 2>/dev/null || true
+    fi
+    if systemctl is-enabled --quiet ssh-wsproxy 2>/dev/null; then
+        systemctl disable ssh-wsproxy 2>/dev/null || true
+    fi
+    
+    rm -f /etc/systemd/system/ssh-limiter.service /etc/systemd/system/ssh-wsproxy.service
     systemctl daemon-reload 2>/dev/null || true
     
-    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom httpcustom custom ssh-domain domain dominio update menu tin vps; do
+    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom httpcustom custom ssh-domain domain dominio ssh-wsproxy wsproxy update menu tin vps; do
         rm -f "/usr/local/bin/$b" "/usr/bin/$b"
     done
     rm -rf /etc/vps-ssh-limiter
@@ -137,7 +144,8 @@ apt-get install -y -qq \
     gawk \
     sed \
     util-linux \
-    dnsutils
+    dnsutils \
+    python3
 
 log_success "Dependencias instaladas con éxito."
 
@@ -190,7 +198,7 @@ log_success "Shells restringidas autorizadas para autenticación sin apertura de
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom ssh-domain menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom ssh-domain ssh-wsproxy menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -218,21 +226,30 @@ ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/httpcustom
 ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/custom
 ln -sf /usr/local/bin/ssh-domain /usr/local/bin/domain
 ln -sf /usr/local/bin/ssh-domain /usr/local/bin/dominio
+ln -sf /usr/local/bin/ssh-wsproxy /usr/local/bin/wsproxy
 
-for bin_name in "${BIN_LIST[@]}" tin vps update httpcustom custom domain dominio; do
+for bin_name in "${BIN_LIST[@]}" tin vps update httpcustom custom domain dominio wsproxy; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
-# Registrar versión instalada
+# Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.5.0" > /etc/vps-ssh-limiter/version
+echo "1.6.0" > /etc/vps-ssh-limiter/version
 
-log_success "Binarios y atajos ('menu', 'update', 'domain', 'httpcustom', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
+if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
+    cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'
+LISTEN_PORT=80
+TARGET_HOST=127.0.0.1
+TARGET_PORT=143
+EOF
+fi
+
+log_success "Binarios y atajos ('menu', 'update', 'domain', 'httpcustom', 'wsproxy', 'tin', 'vps') vinculados."
 
 # ------------------------------------------------------------------------------
-# 5. Instalación y Activación del Demonio Systemd
+# 5. Instalación y Activación de Demonios Systemd (ssh-limiter & ssh-wsproxy)
 # ------------------------------------------------------------------------------
-log_info "5/5 Configurando servicio systemd ssh-limiter.service..."
+log_info "5/5 Configurando servicios systemd ssh-limiter y ssh-wsproxy (Puerto 80)..."
 
 SERVICE_DST="/etc/systemd/system/ssh-limiter.service"
 if [[ -f "$SCRIPT_DIR/systemd/ssh-limiter.service" ]]; then
@@ -266,15 +283,54 @@ EOF
     chmod 644 "$SERVICE_DST"
 fi
 
-# Recargar y arrancar servicio
+WS_SERVICE_DST="/etc/systemd/system/ssh-wsproxy.service"
+if [[ -f "$SCRIPT_DIR/systemd/ssh-wsproxy.service" ]]; then
+    install -m 644 "$SCRIPT_DIR/systemd/ssh-wsproxy.service" "$WS_SERVICE_DST"
+else
+    cat > "$WS_SERVICE_DST" <<'EOF'
+[Unit]
+Description=VPS WebSocket Proxy for SSH & Dropbear (Port 80)
+Documentation=https://github.com/sendeiser/tin-script
+After=network.target dropbear.service ssh.service sshd.service
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ssh-wsproxy --run
+Restart=always
+RestartSec=3
+KillMode=process
+TimeoutStopSec=5
+LimitNOFILE=65536
+TasksMax=infinity
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ssh-wsproxy
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 644 "$WS_SERVICE_DST"
+fi
+
+# Recargar y arrancar servicios
 systemctl daemon-reload
-systemctl enable ssh-limiter.service --now
-systemctl restart ssh-limiter.service
+systemctl enable ssh-limiter.service --now 2>/dev/null || true
+systemctl restart ssh-limiter.service 2>/dev/null || true
+
+systemctl enable ssh-wsproxy.service --now 2>/dev/null || true
+systemctl restart ssh-wsproxy.service 2>/dev/null || true
 
 if systemctl is-active --quiet ssh-limiter; then
-    log_success "Servicio ssh-limiter activo y supervisado correctamente por systemd."
+    log_success "Servicio ssh-limiter activo y supervisado por systemd."
 else
-    log_warn "El servicio ssh-limiter fue instalado pero su estado requiere revisión (systemctl status ssh-limiter)."
+    log_warn "El servicio ssh-limiter requiere revisión (systemctl status ssh-limiter)."
+fi
+
+if systemctl is-active --quiet ssh-wsproxy; then
+    log_success "Servicio ssh-wsproxy activo en el puerto 80 (systemd)."
+else
+    log_warn "El servicio ssh-wsproxy requiere revisión (systemctl status ssh-wsproxy)."
 fi
 
 # ------------------------------------------------------------------------------
@@ -295,10 +351,13 @@ echo -e "  ${C_CYAN}ssh-userdel <usuario>${C_RESET}      : Revocar y eliminar us
 echo -e "  ${C_CYAN}ssh-online${C_RESET}             : Monitor de conexiones en tiempo real (--json para APIs)"
 echo -e "  ${C_CYAN}ssh-httpcustom [usuario]${C_RESET}: Generador de fichas y guía para HTTP Custom (atajos: httpcustom, custom)"
 echo -e "  ${C_CYAN}ssh-domain${C_RESET}               : Gestor de dominios Cloudflare/DuckDNS/Gratis (atajos: domain, dominio)"
+echo -e "  ${C_CYAN}ssh-wsproxy${C_RESET}              : WebSocket Proxy puerto 80 para HTTP Custom / CDN (atajo: wsproxy)"
 echo -e ""
-echo -e "${C_BOLD}Supervisión del Demonio:${C_RESET}"
-echo -e "  ${C_GRAY}systemctl status ssh-limiter${C_RESET}   : Estado del servicio"
-echo -e "  ${C_GRAY}journalctl -u ssh-limiter -f${C_RESET}   : Registros de mitigación en vivo"
+echo -e "${C_BOLD}Supervisión de Servicios:${C_RESET}"
+echo -e "  ${C_GRAY}systemctl status ssh-limiter${C_RESET}   : Estado del limitador de conexiones"
+echo -e "  ${C_GRAY}systemctl status ssh-wsproxy${C_RESET}   : Estado del WebSocket Proxy (Puerto 80)"
+echo -e "  ${C_GRAY}journalctl -u ssh-limiter -f${C_RESET}   : Registros del limitador en vivo"
+echo -e "  ${C_GRAY}journalctl -u ssh-wsproxy -f${C_RESET}   : Registros del WebSocket Proxy en vivo"
 echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────${C_RESET}"
 
 exit 0

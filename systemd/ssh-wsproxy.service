@@ -1,0 +1,25 @@
+[Unit]
+Description=VPS WebSocket Proxy for SSH & Dropbear (Port 80)
+Documentation=https://github.com/sendeiser/tin-script
+After=network.target dropbear.service ssh.service sshd.service
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ssh-wsproxy --run
+Restart=always
+RestartSec=3
+KillMode=process
+TimeoutStopSec=5
+
+# Seguridad y límites de recursos
+LimitNOFILE=65536
+TasksMax=infinity
+
+# Registro en systemd-journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ssh-wsproxy
+
+[Install]
+WantedBy=multi-user.target
