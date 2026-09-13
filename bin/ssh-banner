@@ -100,6 +100,14 @@ get_system_user_info() {
         target="$req_user"
     elif [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]] && id "${BANNER_USER}" >/dev/null 2>&1; then
         target="${BANNER_USER}"
+    else
+        # Auto-detectar primer usuario de cliente activo en el sistema (UID >= 1000)
+        while IFS=: read -r _u _ _uid _ _ _ _; do
+            if [[ $_uid -ge 1000 && "$_u" != "nobody" && "$_u" != "nogroup" ]]; then
+                target="$_u"
+                break
+            fi
+        done < /etc/passwd
     fi
 
     if [[ -n "$target" ]]; then
@@ -352,12 +360,9 @@ apply_banner_system() {
     # Configurar OpenSSH con banners específicos por usuario (Match User)
     local sshd_cfg="/etc/ssh/sshd_config"
     if [[ -f "$sshd_cfg" ]]; then
-        # Asegurar directiva Banner global
-        if grep -q "^#\?Banner" "$sshd_cfg"; then
-            sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
-        else
-            sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
-        fi
+        # Desactivar directiva Banner global al inicio para que OpenSSH
+        # aplique el banner individual de cada cuenta en Match User
+        sed -i 's|^#\?Banner\s\+.*|#Banner none|g' "$sshd_cfg"
 
         # Asegurar puertos 22 y 143 para OpenSSH con banners individuales
         if ! grep -E -q "^Port\s+143" "$sshd_cfg"; then
@@ -410,6 +415,8 @@ EOF_SSHD
                     match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n    PasswordAuthentication yes\n    AllowTcpForwarding yes\n    TCPKeepAlive yes\n    ClientAliveInterval 30\n    ClientAliveCountMax 3\n"
                 fi
             done < /etc/passwd
+            # Bloque de respaldo para conexiones no coincidentes o generales
+            match_blocks+="Match all\n    Banner ${BANNER_FILE}\n"
             match_blocks+="# END VPS-SSH-LIMITER USER BANNERS\n"
 
             echo -e "\n$match_blocks" >> "$sshd_cfg"
@@ -420,8 +427,9 @@ EOF_SSHD
             if sshd -t 2>/dev/null; then
                 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
             else
-                # Si falló la sintaxis, revertir bloque Match
+                # Si falló la sintaxis, revertir bloque Match y restaurar banner global
                 sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
+                sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
                 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
             fi
         fi
@@ -649,10 +657,14 @@ select_user_for_banner() {
     echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
     echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}USUARIO EN BANNER HTTP CUSTOM     ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
-    echo -e "Configura qué datos de usuario (nombre, vencimiento"
-    echo -e "y consumo de datos del sistema) saldrán en el banner:\n"
-    echo -e "  Usuario actual: ${C_CYAN}${BANNER_USER:-auto}${C_RESET}\n"
-    echo -e "  ${C_GREEN}[A]${C_RESET} Auto-detectar (Primer cliente activo del VPS)"
+    echo -e "Configura el modo de usuario para los banners de conexión:\n"
+
+    local current_mode="Dinámico Multiusuario (Cada cuenta ve sus datos)"
+    if [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]]; then
+        current_mode="Fijo forzado: [${BANNER_USER}]"
+    fi
+    echo -e "  Modo actual: ${C_CYAN}${current_mode}${C_RESET}\n"
+    echo -e "  ${C_GREEN}[D]${C_RESET} Modo Dinámico Multiusuario ${C_YELLOW}(Recomendado - Cada cliente ve sus datos)${C_RESET}"
 
     local users=()
     while IFS=: read -r u _ uid _ _ _ _; do
@@ -661,30 +673,34 @@ select_user_for_banner() {
         fi
     done < /etc/passwd
 
-    local i=1
-    for u in "${users[@]}"; do
-        echo -e "  ${C_YELLOW}[$i]${C_RESET} $u"
-        ((i++))
-    done
+    if [[ ${#users[@]} -gt 0 ]]; then
+        echo -e "\n  ${C_GRAY}--- O asignar un usuario específico para probar o fijar: ---${C_RESET}"
+        local i=1
+        for u in "${users[@]}"; do
+            echo -e "  ${C_YELLOW}[$i]${C_RESET} Fijar usuario: $u"
+            ((i++))
+        done
+    fi
     echo -e "  ${C_YELLOW}[M]${C_RESET} Escribir nombre manualmente"
     echo -e "  ${C_RED}[0]${C_RESET} Cancelar\n"
 
     local sel=""
     read -r -p "Seleccione una opción: " sel || true
-    if [[ "$sel" =~ ^[Aa]$ ]]; then
+    if [[ "$sel" =~ ^[DdAa]$ ]]; then
         BANNER_USER="auto"
         save_banner_conf
         apply_banner_system
-        echo -e "\n${C_GREEN}✔ Modo auto-detectar activado.${C_RESET}"
+        echo -e "\n${C_GREEN}✔ Modo Dinámico Multiusuario activado.${C_RESET}"
+        echo -e "${C_GRAY}Cada cliente que se conecte verá su propio nombre, vencimiento y consumo.${C_RESET}"
         press_enter
     elif [[ "$sel" =~ ^[Mm]$ ]]; then
         local custom_u=""
-        read -r -p "Nombre de usuario a mostrar: " custom_u || true
+        read -r -p "Nombre de usuario fijo a mostrar: " custom_u || true
         if [[ -n "$custom_u" ]]; then
             BANNER_USER="$custom_u"
             save_banner_conf
             apply_banner_system
-            echo -e "\n${C_GREEN}✔ Usuario '$BANNER_USER' asignado al banner.${C_RESET}"
+            echo -e "\n${C_GREEN}✔ Usuario fijo '$BANNER_USER' asignado al banner.${C_RESET}"
             press_enter
         fi
     elif [[ "$sel" =~ ^[0-9]+$ && "$sel" -ge 1 && "$sel" -le "${#users[@]}" ]]; then
@@ -692,7 +708,7 @@ select_user_for_banner() {
         BANNER_USER="$chosen"
         save_banner_conf
         apply_banner_system
-        echo -e "\n${C_GREEN}✔ Banner asignado al usuario '${chosen}'.${C_RESET}"
+        echo -e "\n${C_GREEN}✔ Usuario fijo '${chosen}' asignado al banner.${C_RESET}"
         press_enter
     fi
 }
@@ -814,21 +830,20 @@ main_banner_menu() {
             6) t_label="Personalizado" ;;
         esac
 
-        local u_disp="${BANNER_USER:-auto}"
-        if [[ "$u_disp" == "auto" ]]; then
-            get_system_user_info "auto"
-            u_disp="Auto (${U_NAME})"
+        local u_disp="Dinámico Multiusuario (Por cuenta)"
+        if [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]]; then
+            u_disp="Fijo ($BANNER_USER)"
         fi
 
         echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
         echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}BANNERS Y REGISTRO HTTP CUSTOM${C_RESET}    ${C_CYAN}║${C_RESET}"
         echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
         echo -e "  • Apps: ${b_status}  ${C_YELLOW}${t_label}${C_RESET}"
-        echo -e "  • Usuario: ${C_GREEN}${u_disp}${C_RESET}"
+        echo -e "  • Modo: ${C_GREEN}${u_disp}${C_RESET}"
         echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         echo -e "  ${C_YELLOW}[1]${C_RESET} 👁️  Previsualizar banner actual"
         echo -e "  ${C_YELLOW}[2]${C_RESET} 🎨  Elegir plantilla prediseñada"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} 👤  Asignar usuario del banner"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} 👤  Modo de usuario (Dinámico / Fijo)"
         echo -e "  ${C_YELLOW}[4]${C_RESET} ✏️  Personalizar textos/contacto"
         echo -e "  ${C_YELLOW}[5]${C_RESET} 📝  Editar archivo manualmente"
         echo -e "  ${C_YELLOW}[6]${C_RESET} ⚡  Activar / Desactivar en Apps"
