@@ -162,12 +162,13 @@ if [[ -f "$DROPBEAR_DEFAULT" ]]; then
 fi
 
 # Escribir configuración estricta de Dropbear
+mkdir -p /etc/dropbear /etc/vps-ssh-limiter
 cat > "$DROPBEAR_DEFAULT" <<'EOF'
 # Configuración generada automáticamente por vps-ssh-limiter
 NO_START=0
 DROPBEAR_PORT=143
-DROPBEAR_EXTRA_ARGS="-p 90 -p 109"
-DROPBEAR_BANNER=""
+DROPBEAR_EXTRA_ARGS="-p 90 -p 109 -b /etc/vps-ssh-limiter/banner.net"
+DROPBEAR_BANNER="/etc/vps-ssh-limiter/banner.net"
 DROPBEAR_RECEIVE_WINDOW=65536
 EOF
 

@@ -161,15 +161,19 @@ apply_banner_system() {
     load_banner_conf
 
     mkdir -p "$CONFIG_DIR"
+    mkdir -p "/etc/dropbear"
+
     if [[ "$BANNER_ENABLED" == "true" ]]; then
-        if [[ "$TEMPLATE_ID" != "5" ]]; then
+        if [[ "$TEMPLATE_ID" != "5" || ! -f "$BANNER_FILE" || ! -s "$BANNER_FILE" ]]; then
             generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" > "$BANNER_FILE"
         fi
         cp -f "$BANNER_FILE" "$ISSUE_FILE" 2>/dev/null || true
-        chmod 644 "$BANNER_FILE" "$ISSUE_FILE" 2>/dev/null || true
+        cp -f "$BANNER_FILE" "/etc/dropbear/banner" 2>/dev/null || true
+        chmod 644 "$BANNER_FILE" "$ISSUE_FILE" "/etc/dropbear/banner" 2>/dev/null || true
     else
         echo -n "" > "$BANNER_FILE"
         echo -n "" > "$ISSUE_FILE"
+        rm -f "/etc/dropbear/banner" 2>/dev/null || true
     fi
 
     # Configurar OpenSSH
@@ -189,7 +193,21 @@ apply_banner_system() {
         else
             echo "DROPBEAR_BANNER=\"${BANNER_FILE}\"" >> /etc/default/dropbear
         fi
-        systemctl restart dropbear 2>/dev/null || true
+
+        # Asegurar -b flag en DROPBEAR_EXTRA_ARGS (Obligatorio para systemd en Debian/Ubuntu)
+        local cur_extra=""
+        cur_extra=$(grep "^DROPBEAR_EXTRA_ARGS=" /etc/default/dropbear | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
+        cur_extra=$(echo "$cur_extra" | sed -E 's/-b\s+[^ ]+//g' | xargs)
+        if [[ -z "$cur_extra" ]]; then
+            cur_extra="-p 90 -p 109"
+        fi
+
+        if [[ "$BANNER_ENABLED" == "true" ]]; then
+            cur_extra="${cur_extra} -b ${BANNER_FILE}"
+        fi
+
+        sed -i "s|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS=\"${cur_extra}\"|g" /etc/default/dropbear
+        systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
     fi
 
     # Configurar Banner Dinámico de Usuario en Login (/etc/profile.d/vps-ssh-banner.sh)

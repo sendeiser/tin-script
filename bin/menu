@@ -661,9 +661,12 @@ menu_ports() {
                     for p in ${extra_p:-}; do
                         extra_flags+="-p $p "
                     done
+                    if [[ -f /etc/vps-ssh-limiter/banner.net ]]; then
+                        extra_flags+="-b /etc/vps-ssh-limiter/banner.net "
+                    fi
                     extra_flags=$(echo "$extra_flags" | xargs)
-                    sed -i "s/^DROPBEAR_EXTRA_ARGS=.*/DROPBEAR_EXTRA_ARGS=\"$extra_flags\"/" /etc/default/dropbear
-                    systemctl restart dropbear
+                    sed -i "s|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS=\"$extra_flags\"|" /etc/default/dropbear
+                    systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
                     echo -e "${C_GREEN}✔ Puertos de Dropbear actualizados y servicio reiniciado.${C_RESET}"
                 fi
                 press_enter
