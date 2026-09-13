@@ -212,7 +212,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.6.0"
+    local current_ver="1.6.1"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -254,10 +254,10 @@ draw_dashboard() {
     echo -e " ${C_BOLD}${C_YELLOW}[1]${C_RESET} ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}    ${C_GRAY}(Crear, Renovar, Modificar, Bloquear, Eliminar)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[2]${C_RESET} ${C_BOLD}► MONITOR DE CONEXIONES${C_RESET}  ${C_GRAY}(Tabla en vivo, Modo dinámico en tiempo real)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[3]${C_RESET} ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET} ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Puertos Dropbear, Reiniciar SSH/Dropbear)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET} ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Dropbear, WebSocket Proxy 80, Reiniciar SSH)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET} ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
     echo -e " ${C_BOLD}${C_CYAN}[6]${C_RESET} ${C_BOLD}${C_CYAN}► GESTIÓN DE DOMINIO / HOST${C_RESET} ${C_GRAY}(Cloudflare API, DuckDNS, Dominio Gratis)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[7]${C_RESET} ${C_BOLD}► GUÍA & DATOS HTTP CUSTOM${C_RESET} ${C_GRAY}(Tutorial paso a paso, Payloads y Fichas)${C_RESET}"
+    echo -e " ${C_BOLD}${C_CYAN}[7]${C_RESET} ${C_BOLD}${C_CYAN}► GUÍA & ASISTENTE HTTP CUSTOM${C_RESET} ${C_GRAY}(Asistente CDN, Payloads, Alternativas)${C_RESET}"
     echo -e " $opt_8_txt"
     echo -e " ${C_BOLD}${C_YELLOW}[9]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
     echo -e " ${C_BOLD}${C_RED}[0]${C_RESET} ${C_BOLD}► SALIR${C_RESET}"

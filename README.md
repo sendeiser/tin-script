@@ -59,7 +59,7 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.miservidor.com  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.6.0 - ACTUALIZADO]
+ Versión: [v1.6.1 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
@@ -67,10 +67,10 @@ sudo menu
  [1] ► GESTIÓN DE USUARIOS    (Crear, Renovar, Modificar, Bloquear, Eliminar)
  [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Modo dinámico en tiempo real)
  [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
- [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, WebSocket Proxy 80, Reiniciar)
+ [4] ► PROTOCOLOS Y PUERTOS   (Dropbear, WebSocket Proxy 80, Reiniciar SSH)
  [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
  [6] ► GESTIÓN DE DOMINIO / HOST (Cloudflare API, DuckDNS, Dominio Gratis)
- [7] ► GUÍA & DATOS HTTP CUSTOM (Tutorial paso a paso, Payloads y Fichas)
+ [7] ► GUÍA & ASISTENTE HTTP CUSTOM (Asistente CDN, Payloads, Alternativas)
  [8] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
  [9] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
  [0] ► SALIR
@@ -130,15 +130,22 @@ El servicio **`ssh-wsproxy`** escucha en el **puerto 80**:
 [Dropbear (127.0.0.1:143)] ──► ¡Sesión SSH Autenticada y Conectada!
 ```
 
-### 3. Configuración en HTTP Custom:
-- **Server IP / Host:** Dominio CDN de Cloudflare con puerto `:80` (ej: `woocommerce.everlytic.net:80`).
-- **Casilla SSH:** Marcada (✔).
-- **Puerto SSH:** `80`.
-- **Payload:**
-  ```text
-  GET / HTTP/1.3[crlf]Host: rexo.personal.com.ar[crlf][crlf][crlf][split][crlf][split]GETT / HTTP/1.1[crlf]Host: martin.supravps.shop[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]
-  ```
-- **Usuario y Contraseña:** Los datos de la cuenta creada en tu VPS (`ssh-useradd`).
+### 3. Asistente Guiado Paso a Paso (Opción [7] -> [1] o `ssh-httpcustom --wizard`)
+El menú interactivo incluye un generador automático que te guía paso a paso:
+1. Elige tu operadora o escribe tu Bug Host (Personal, Claro, Movistar, WhatsApp).
+2. Detecta tu subdominio configurado en la VPS (`martin.supravps.shop`).
+3. Te sugiere dominios CDN de Cloudflare probados (ej: `woocommerce.everlytic.net`).
+4. Selecciona tu usuario túnel registrado.
+5. Genera la ficha completa con el Payload listo para copiar y los datos exactos para la app.
+
+### 4. Alternativas a Cloudflare (Opción [7] -> [2] o `ssh-httpcustom --alternatives`)
+Si no deseas usar Cloudflare o tu operadora presenta bloqueos sobre sus IPs:
+- **Alternativa 1: WebSocket Directo en Puerto 80 (Sin Cloudflare)**
+  - Te conectas directo a la IP de tu VPS o a un dominio gratuito de 1-Click (`sslip.io` / `DuckDNS`) en el puerto 80. Menor latencia, cero configuración externa y el tráfico es gestionado directamente por `ssh-wsproxy`.
+- **Alternativa 2: Conexión Cifrada SSL / TLS con SNI Spoofing (Puerto 443)**
+  - No requiere CDN. Conectas al puerto 443 marcando `SSL` en HTTP Custom e ingresando el Bug Host en el campo **SNI**. El tráfico viaja completamente encriptado por TLS.
+- **Alternativa 3: Otras Redes CDN Globales (Fastly, Gcore, BunnyCDN)**
+  - Redes alternativas de alta velocidad con soporte WebSocket (Gcore cuenta con 1 TB mensual gratuito y servidores en Sudamérica; Fastly permite origins HTTP directos).
 
 ---
 

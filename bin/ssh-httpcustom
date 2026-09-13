@@ -200,6 +200,195 @@ show_payloads() {
 }
 
 # ------------------------------------------------------------------------------
+# Asistente Guiado: WebSocket Cloudflare CDN + Bug Host & Split (Puerto 80)
+# ------------------------------------------------------------------------------
+wizard_websocket_cdn() {
+    clear
+    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}     ASISTENTE: WEBSOCKET CLOUDFLARE CDN + BUG HOST & SPLIT      ${C_RESET}${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_YELLOW}Este asistente configurará tu Payload personalizado y los datos exactos"
+    echo -e "que debes colocar en HTTP Custom para conectar por el puerto 80.${C_RESET}\n"
+
+    # Paso 1: Bug Host
+    echo -e "${C_BOLD}► PASO 1: Selecciona o escribe el Bug Host (Sitio con navegación gratuita):${C_RESET}"
+    echo -e "  [1] Personal Argentina (${C_GREEN}rexo.personal.com.ar${C_RESET})"
+    echo -e "  [2] Personal Argentina Recargas (${C_GREEN}recarga.personal.com.ar${C_RESET})"
+    echo -e "  [3] Claro Argentina (${C_GREEN}servicios.claro.com.ar${C_RESET})"
+    echo -e "  [4] Movistar / WhatsApp Zero-Rating (${C_GREEN}c.whatsapp.net${C_RESET})"
+    echo -e "  [5] Ingresar otro Bug Host personalizado"
+    local opt_bh="" bughost=""
+    read -r -p "Opción [1-5, defecto 1]: " opt_bh || true
+    case "${opt_bh:-1}" in
+        1) bughost="rexo.personal.com.ar" ;;
+        2) bughost="recarga.personal.com.ar" ;;
+        3) bughost="servicios.claro.com.ar" ;;
+        4) bughost="c.whatsapp.net" ;;
+        5)
+            read -r -p "Introduce el Bug Host (ej: bughost.com): " bughost || true
+            bughost=$(echo "$bughost" | tr -d '[:space:]')
+            if [[ -z "$bughost" ]]; then
+                bughost="rexo.personal.com.ar"
+            fi
+            ;;
+        *) bughost="rexo.personal.com.ar" ;;
+    esac
+    echo -e "✔ Bug Host seleccionado: ${C_GREEN}${C_BOLD}${bughost}${C_RESET}\n"
+
+    # Paso 2: Dominio de tu VPS en Cloudflare
+    local cur_dom
+    cur_dom=$(get_server_host)
+    echo -e "${C_BOLD}► PASO 2: Dominio o Subdominio de tu VPS en Cloudflare:${C_RESET}"
+    echo -e "${C_GRAY}(Debe tener la Nube Naranja / Proxy activado en Cloudflare hacia tu VPS)${C_RESET}"
+    local vps_domain=""
+    if [[ -n "$cur_dom" && "$cur_dom" == *"."* ]]; then
+        read -r -p "Dominio de tu VPS [Enter para '${cur_dom}']: " vps_domain || true
+        vps_domain="${vps_domain:-$cur_dom}"
+    else
+        read -r -p "Introduce tu subdominio en Cloudflare (ej: martin.supravps.shop): " vps_domain || true
+    fi
+    vps_domain=$(echo "$vps_domain" | tr -d '[:space:]')
+    if [[ -z "$vps_domain" ]]; then
+        vps_domain="martin.supravps.shop"
+    fi
+    echo -e "✔ Dominio de tu VPS: ${C_GREEN}${C_BOLD}${vps_domain}${C_RESET}\n"
+
+    # Paso 3: Host de Conexión Fronting / CDN (Server IP/Host en HTTP Custom)
+    echo -e "${C_BOLD}► PASO 3: Host de Conexión CDN (Server IP/Host en HTTP Custom):${C_RESET}"
+    echo -e "  [1] Usar ${C_GREEN}woocommerce.everlytic.net${C_RESET} (Dominio CDN Cloudflare probado)"
+    echo -e "  [2] Usar ${C_GREEN}caching.ovh${C_RESET} (CDN Cloudflare)"
+    echo -e "  [3] Usar IP Anycast de Cloudflare (${C_GREEN}104.16.51.51${C_RESET})"
+    echo -e "  [4] Usar tu propio dominio (${C_GREEN}${vps_domain}${C_RESET})"
+    echo -e "  [5] Ingresar otro host CDN personalizado"
+    local opt_cdn="" cdn_host=""
+    read -r -p "Opción [1-5, defecto 1]: " opt_cdn || true
+    case "${opt_cdn:-1}" in
+        1) cdn_host="woocommerce.everlytic.net" ;;
+        2) cdn_host="caching.ovh" ;;
+        3) cdn_host="104.16.51.51" ;;
+        4) cdn_host="$vps_domain" ;;
+        5)
+            read -r -p "Introduce el host CDN: " cdn_host || true
+            cdn_host=$(echo "$cdn_host" | tr -d '[:space:]')
+            if [[ -z "$cdn_host" ]]; then
+                cdn_host="woocommerce.everlytic.net"
+            fi
+            ;;
+        *) cdn_host="woocommerce.everlytic.net" ;;
+    esac
+    echo -e "✔ Host de Conexión: ${C_GREEN}${C_BOLD}${cdn_host}${C_RESET}\n"
+
+    # Paso 4: Selección de Usuario
+    echo -e "${C_BOLD}► PASO 4: Datos de Usuario SSH:${C_RESET}"
+    local user_list
+    user_list=$(awk -F: '($7 ~ /(nologin|false)/ && $5 ~ /LIM:/) {print $1}' /etc/passwd 2>/dev/null || true)
+    local u_name="" u_pass="clave123"
+    if [[ -n "$user_list" ]]; then
+        echo -e "Usuarios registrados en tu VPS:"
+        local u_arr=() i=1
+        for u in $user_list; do
+            u_arr+=("$u")
+            echo -e "  [$i] $u"
+            i=$((i + 1))
+        done
+        local opt_u=""
+        read -r -p "Selecciona un número de usuario o escribe un nombre [Enter para ${u_arr[0]}]: " opt_u || true
+        if [[ -z "$opt_u" ]]; then
+            u_name="${u_arr[0]}"
+        elif [[ "$opt_u" =~ ^[0-9]+$ ]] && [[ "$opt_u" -ge 1 && "$opt_u" -le "${#u_arr[@]}" ]]; then
+            u_name="${u_arr[$((opt_u - 1))]}"
+        else
+            u_name="$opt_u"
+        fi
+    else
+        read -r -p "Nombre de usuario túnel [ej: usuario1]: " u_name || true
+        u_name="${u_name:-usuario1}"
+    fi
+    read -r -p "Contraseña del usuario [Enter para 'tu_contraseña']: " u_pass || true
+    u_pass="${u_pass:-tu_contraseña}"
+
+    # Generar el Payload
+    local gen_payload="GET / HTTP/1.3[crlf]Host: ${bughost}[crlf][crlf][crlf][split][crlf][split]GETT / HTTP/1.1[crlf]Host: ${vps_domain}[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]"
+
+    clear
+    echo -e "${C_GREEN}${C_BOLD}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_GREEN}${C_BOLD}║   ✔ CONFIGURACIÓN COMPLETA PARA HTTP CUSTOM GENERADA CON ÉXITO   ║${C_RESET}"
+    echo -e "${C_GREEN}${C_BOLD}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_CYAN}📋 1. PAYLOAD GENERADO (Copia y pega en la pantalla de inicio):${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_YELLOW}${gen_payload}${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}\n"
+
+    echo -e "${C_CYAN}⚙️ 2. AJUSTES SSH EN HTTP CUSTOM (Menú lateral ☰ -> SSH Setting):${C_RESET}"
+    echo -e "   • ${C_BOLD}Server IP / Host:${C_RESET}     ${C_GREEN}${cdn_host}${C_RESET}"
+    echo -e "   • ${C_BOLD}Server Port:${C_RESET}          ${C_GREEN}80${C_RESET} (Atendido por ssh-wsproxy en tu VPS)"
+    echo -e "   • ${C_BOLD}Username:${C_RESET}             ${C_GREEN}${u_name}${C_RESET}"
+    echo -e "   • ${C_BOLD}Password:${C_RESET}             ${C_GREEN}${u_pass}${C_RESET}\n"
+
+    echo -e "${C_CYAN}⚡ 3. FORMATO RÁPIDO DE IMPORTACIÓN (1-Click en pantalla de inicio):${C_RESET}"
+    echo -e "   ${C_BOLD}${cdn_host}:80@${u_name}:${u_pass}${C_RESET}\n"
+
+    echo -e "${C_CYAN}🔍 4. CHECKLIST DE VERIFICACIÓN:${C_RESET}"
+    echo -e "   ✔ En Cloudflare: ${vps_domain} debe tener la ${C_YELLOW}Nube Naranja (Proxy: ON)${C_RESET} apuntando a tu IP."
+    echo -e "   ✔ En tu VPS: El servicio ${C_GREEN}ssh-wsproxy${C_RESET} está escuchando en el puerto 80."
+    echo -e "   ✔ En HTTP Custom: La casilla ${C_GREEN}✔ SSH${C_RESET} debe estar marcada."
+    echo -e "   ✔ En HTTP Custom: En el menú lateral activa ${C_GREEN}Auto Ping (3-5s)${C_RESET}."
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+}
+
+# ------------------------------------------------------------------------------
+# Guía de Alternativas a Cloudflare
+# ------------------------------------------------------------------------------
+show_alternatives() {
+    clear
+    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}                   ALTERNATIVAS A CLOUDFLARE                    ${C_RESET}${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}► ALTERNATIVA 1: WebSocket Directo en Puerto 80 (Sin CDN / Sin Cloudflare)${C_RESET}"
+    echo -e "• ${C_BOLD}¿En qué consiste?${C_RESET}"
+    echo -e "  Te conectas directamente a la IP pública o dominio de tu VPS en el puerto 80,"
+    echo -e "  sin pasar por Cloudflare ni requerir ninguna cuenta externa."
+    echo -e "• ${C_BOLD}Ventajas:${C_RESET}"
+    echo -e "  - Cero intermediarios: no necesitas configurar DNS en Cloudflare."
+    echo -e "  - Menor ping y máxima velocidad directa para juegos y streaming."
+    echo -e "  - Funciona inmediatamente con dominios gratis de 1-Click (sslip.io) o DuckDNS."
+    echo -e "• ${C_BOLD}Cómo configurarlo en HTTP Custom:${C_RESET}"
+    echo -e "  - Server IP / Host: La IP de tu VPS o tu dominio (ej: ${C_GREEN}vps.midominio.com:80${C_RESET})."
+    echo -e "  - Payload:"
+    echo -e "    ${C_CYAN}GET / HTTP/1.1[crlf]Host: bughost.com[crlf]Upgrade: websocket[crlf]Connection: Keep-Alive[crlf][crlf]${C_RESET}"
+    echo -e "  - En tu VPS: El demonio ${C_BOLD}ssh-wsproxy${C_RESET} recibe en el puerto 80 y lo envía a Dropbear.\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}► ALTERNATIVA 2: Conexión Cifrada SSL / TLS con SNI Spoofing (Puerto 443)${C_RESET}"
+    echo -e "• ${C_BOLD}¿En qué consiste?${C_RESET}"
+    echo -e "  En lugar de usar HTTP en el puerto 80, conectas por el puerto 443 con cifrado TLS."
+    echo -e "  El campo SNI (Server Name Indication) se disfraza como el Bug Host (ej: rexo.personal.com.ar)."
+    echo -e "• ${C_BOLD}Ventajas:${C_RESET}"
+    echo -e "  - El tráfico viaja 100% cifrado y pasa desapercibido ante filtros de operadoras."
+    echo -e "  - En muchas compañías móviles, los bugs SSL en el puerto 443 tienen mayor velocidad"
+    echo -e "    y menor tasa de desconexión que el puerto 80."
+    echo -e "  - No requiere ningún CDN intermediario."
+    echo -e "• ${C_BOLD}Cómo configurarlo en HTTP Custom:${C_RESET}"
+    echo -e "  - Marca la casilla ${C_GREEN}✔ SSL${C_RESET} o ${C_GREEN}✔ Payload/SSL${C_RESET}."
+    echo -e "  - En el campo SNI escribe el Bug Host: ${C_CYAN}rexo.personal.com.ar${C_RESET} (o tu bug TLS)."
+    echo -e "  - Server IP / Host: La IP de tu VPS (o dominio) con puerto ${C_GREEN}:443${C_RESET}.\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}► ALTERNATIVA 3: Otras Redes CDN Globales (Fastly, Gcore, BunnyCDN)${C_RESET}"
+    echo -e "• ${C_BOLD}Fastly CDN (https://www.fastly.com):${C_RESET}"
+    echo -e "  - Soporta WebSockets nativos de alta velocidad."
+    echo -e "  - Puedes crear una cuenta gratuita, configurar como 'Origin' la IP de tu VPS en puerto 80"
+    echo -e "    y usar el dominio de Fastly en tu payload como fronting."
+    echo -e "• ${C_BOLD}Gcore CDN (https://gcore.com):${C_RESET}"
+    echo -e "  - Cuenta con plan gratuito de 1 TB mensual y servidores de ultra baja latencia"
+    echo -e "    en Sudamérica (Buenos Aires, San Pablo, Santiago)."
+    echo -e "  - Excelente alternativa si Cloudflare sufre de bloqueos por tu proveedor móvil."
+    echo -e "• ${C_BOLD}CloudFront (Amazon AWS):${C_RESET}"
+    echo -e "  - Permite distribuciones HTTP con WebSockets habilitados hacia el puerto 80 de tu VPS."
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+}
+
+# ------------------------------------------------------------------------------
 # Manejo de Parámetros CLI o Modo Interactivo
 # ------------------------------------------------------------------------------
 press_enter() {
@@ -209,6 +398,14 @@ press_enter() {
 
 if [[ $# -ge 1 ]]; then
     case "$1" in
+        --wizard|-w)
+            wizard_websocket_cdn
+            exit 0
+            ;;
+        --alternatives|-a)
+            show_alternatives
+            exit 0
+            ;;
         --guide|-g)
             show_tutorial
             exit 0
@@ -219,8 +416,10 @@ if [[ $# -ge 1 ]]; then
             ;;
         -h|--help)
             echo "Uso: ssh-httpcustom [usuario] [contraseña]"
-            echo "      ssh-httpcustom --guide"
-            echo "      ssh-httpcustom --payloads"
+            echo "      ssh-httpcustom --wizard        (Asistente interactivo CDN + Bug Host)"
+            echo "      ssh-httpcustom --alternatives  (Alternativas a Cloudflare)"
+            echo "      ssh-httpcustom --guide         (Guía paso a paso)"
+            echo "      ssh-httpcustom --payloads      (Catálogo de payloads)"
             exit 0
             ;;
         *)
@@ -243,21 +442,26 @@ while true; do
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}           MÓDULO Y GUÍA HTTP CUSTOM / INJECTOR / VPN           ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-    echo -e "  ${C_YELLOW}[1]${C_RESET} Ver Guía Paso a Paso (Cómo configurar HTTP Custom)"
-    echo -e "  ${C_YELLOW}[2]${C_RESET} Generar Ficha de Cliente para un usuario (WhatsApp/Telegram)"
-    echo -e "  ${C_YELLOW}[3]${C_RESET} Ejemplos de Payloads recomendados (CDN / WebSocket / Proxy)"
+    echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_BOLD}Asistente Guiado:${C_RESET} Configurar WebSocket CDN + Bug Host (Puerto 80)"
+    echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_BOLD}Alternativas a Cloudflare${C_RESET} (Directo, SSL SNI, Fastly, Gcore)"
+    echo -e "  ${C_YELLOW}[3]${C_RESET} Generar Ficha de Cliente para un usuario (WhatsApp/Telegram)"
+    echo -e "  ${C_YELLOW}[4]${C_RESET} Tutorial y Guía Paso a Paso de Conexión en HTTP Custom"
+    echo -e "  ${C_YELLOW}[5]${C_RESET} Catálogo de Payloads Populares recomendados"
     echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
     echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
     opt_hc=""
-    read -r -p "Seleccione una opción [0-3]: " opt_hc || true
+    read -r -p "Seleccione una opción [0-5]: " opt_hc || true
 
     case "${opt_hc:-}" in
         1)
-            clear
-            show_tutorial
+            wizard_websocket_cdn
             press_enter
             ;;
         2)
+            show_alternatives
+            press_enter
+            ;;
+        3)
             echo -e "\n${C_BOLD}${C_CYAN}--- GENERAR FICHA DE DATOS PARA CLIENTE ---${C_RESET}"
             u_name=""
             read -r -p "Usuario: " u_name || true
@@ -273,7 +477,12 @@ while true; do
             fi
             press_enter
             ;;
-        3)
+        4)
+            clear
+            show_tutorial
+            press_enter
+            ;;
+        5)
             clear
             show_payloads
             press_enter
