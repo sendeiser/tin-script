@@ -142,8 +142,9 @@ if not zones:
 for z in zones:
     name = str(z.get("name", "")).strip()
     zid = str(z.get("id", "")).strip()
+    status = str(z.get("status", "active")).strip()
     if name and zid:
-        print(name + "|" + zid)
+        print(name + "|" + zid + "|" + status)
 '
 }
 
@@ -213,13 +214,16 @@ load_cf_credentials() {
     echo -e " 1. Ingresa a tu panel en: ${C_CYAN}https://dash.cloudflare.com${C_RESET}"
     echo -e " 2. Arriba a la derecha haz clic en tu perfil > ${C_BOLD}'My Profile' (Mi Perfil)${C_RESET}"
     echo -e " 3. En la columna izquierda entra a ${C_BOLD}'API Tokens'${C_RESET}"
-    echo -e " 4. Métodos recomendados:"
-    echo -e "    ${C_GREEN}● [1] Global API Key (Más fácil):${C_RESET} En 'Global API Key', clic en 'View' y pon tu contraseña."
-    echo -e "    ${C_GREEN}● [2] API Token:${C_RESET} 'Create Token' > plantilla 'Edit zone DNS' > 'All zones'."
+    echo -e " 4. Métodos disponibles:"
+    echo -e "    ${C_GREEN}● [1] Global API Key (MÁS RECOMENDADO / Sin fallos de permisos):${C_RESET}"
+    echo -e "      En 'Global API Key', clic en 'View' e ingresa tu contraseña."
+    echo -e "    ${C_GREEN}● [2] API Token:${C_RESET}"
+    echo -e "      'Create Token' > plantilla 'Edit zone DNS' > Zona: 'All zones'."
+    echo -e "      ${C_GRAY}(Nota: Asegúrate de haber agregado tu dominio primero con el botón '+ Add a site')${C_RESET}"
     echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}\n"
 
     echo -e "Selecciona el método de autenticación:"
-    echo -e "  ${C_YELLOW}[1]${C_RESET} Global API Key + Correo electrónico (Más sencillo)"
+    echo -e "  ${C_YELLOW}[1]${C_RESET} Global API Key + Correo electrónico (Recomendado sin límites)"
     echo -e "  ${C_YELLOW}[2]${C_RESET} API Token de Cloudflare (Permiso Zone:DNS:Edit)"
     echo -e "  ${C_RED}[0]${C_RESET} Cancelar"
     local opt_auth=""
@@ -520,14 +524,14 @@ setup_cloudflare() {
         return 0
     fi
 
-    echo -e "\n${C_CYAN}Conectando con Cloudflare API para consultar tus dominios activos...${C_RESET}"
+    echo -e "\n${C_CYAN}Conectando con Cloudflare API para consultar tus dominios...${C_RESET}"
 
     local zones_raw=""
     if [[ "$cf_auth_type" == "token" ]]; then
-        zones_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?status=active&per_page=50" \
+        zones_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?per_page=50" \
             -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" || echo "")
     else
-        zones_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?status=active&per_page=50" \
+        zones_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?per_page=50" \
             -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json" || echo "")
     fi
 
@@ -540,76 +544,152 @@ setup_cloudflare() {
     local parsed_zones=""
     parsed_zones=$(echo "$zones_raw" | cf_parse_zones_py)
 
-    if [[ "$parsed_zones" == ERROR:* ]]; then
-        local err_msg="${parsed_zones#ERROR:}"
-        echo -e "\n${C_RED}[ERROR] Cloudflare rechazó la autenticación:${C_RESET} ${err_msg}"
-        echo -e "${C_YELLOW}Verifica tus credenciales (Token o Global API Key + Email).${C_RESET}"
-        if [[ -f "$CF_CONF_FILE" ]]; then
-            echo -e "${C_GRAY}Puedes borrar las credenciales guardadas desde la opción [9] del menú.${C_RESET}"
-        fi
-        press_enter
-        return 1
-    fi
-
-    if [[ "$parsed_zones" == "EMPTY" || -z "$parsed_zones" ]]; then
-        echo -e "\n${C_YELLOW}⚠ No se encontró ningún dominio activo en tu cuenta de Cloudflare.${C_RESET}\n"
-        echo -e "${C_BOLD}¿Qué puedes hacer?${C_RESET}"
-        echo -e " Si no tienes un dominio propio, ¡usa las opciones 100% gratuitas del asistente!"
-        echo -e "   • ${C_GREEN}Opción [1] Dominio Instantáneo 1-Click (sslip.io)${C_RESET} -> Cero cuentas y cero costo."
-        echo -e "   • ${C_GREEN}Opción [2] DuckDNS (*.duckdns.org)${C_RESET} -> 100% gratis con tu cuenta de Gmail."
-        press_enter
-        return 1
-    fi
-
-    # Cargar zonas en array
     local zone_names=()
     local zone_ids=()
-    while IFS="|" read -r z_name z_id; do
-        if [[ -n "$z_name" && -n "$z_id" ]]; then
-            zone_names+=("$z_name")
-            zone_ids+=("$z_id")
-        fi
-    done <<< "$parsed_zones"
+    local zone_statuses=()
+    if [[ "$parsed_zones" != ERROR:* && "$parsed_zones" != "EMPTY" && -n "$parsed_zones" ]]; then
+        while IFS="|" read -r z_name z_id z_status; do
+            if [[ -n "$z_name" && -n "$z_id" ]]; then
+                zone_names+=("$z_name")
+                zone_ids+=("$z_id")
+                zone_statuses+=("${z_status:-active}")
+            fi
+        done <<< "$parsed_zones"
+    fi
 
-    local total_zones="${#zone_names[@]}"
     local selected_name=""
     local selected_id=""
 
-    if [[ "$total_zones" -eq 1 ]]; then
-        selected_name="${zone_names[0]}"
-        selected_id="${zone_ids[0]}"
-        echo -e "\n${C_GREEN}✔ Dominio detectado en tu cuenta:${C_RESET} ${C_BOLD}${C_CYAN}${selected_name}${C_RESET}"
-        local use_detected=""
-        read -r -p "¿Deseas utilizar este dominio? [S/n]: " use_detected || true
-        if [[ "${use_detected:-}" =~ ^[nN]$ ]]; then
-            read -r -p "Introduce el nombre del dominio manualmente: " selected_name || true
-            read -r -p "Introduce el Zone ID de Cloudflare: " selected_id || true
+    # Si no se encontraron zonas o hubo error de permisos al listar
+    if [[ "${#zone_names[@]}" -eq 0 ]]; then
+        if [[ "$parsed_zones" == ERROR:* ]]; then
+            local err_msg="${parsed_zones#ERROR:}"
+            echo -e "\n${C_YELLOW}⚠ Aviso de Cloudflare al consultar dominios:${C_RESET} ${err_msg}"
+            echo -e "${C_GRAY}(Ocurre comúnmente si tu API Token no tiene permiso de lectura de zonas 'Zone:Read')${C_RESET}\n"
+        else
+            echo -e "\n${C_YELLOW}⚠ No se encontró ningún dominio listado automáticamente en tu cuenta de Cloudflare.${C_RESET}"
+            echo -e "${C_GRAY}(Si acabas de agregar el dominio en Cloudflare, puede estar pendiente de verificación o tu Token requiere búsqueda directa)${C_RESET}\n"
         fi
-    else
-        echo -e "\n${C_CYAN}Dominios activos encontrados en tu cuenta de Cloudflare:${C_RESET}"
-        for i in "${!zone_names[@]}"; do
-            local idx=$((i + 1))
-            echo -e "  ${C_YELLOW}[${idx}]${C_RESET} ${C_BOLD}${zone_names[$i]}${C_RESET}"
-        done
-        echo -e "  ${C_YELLOW}[M]${C_RESET} Ingresar otro dominio y Zone ID manualmente"
+
+        echo -e "${C_BOLD}¿Cómo deseas continuar?${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} Buscar tu dominio por nombre directo (ej: tudominio.shop)"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} Ingresar Dominio y Zone ID manualmente"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} Cambiar a Global API Key + Correo (Recomendado sin límites de permisos)"
         echo -e "  ${C_RED}[0]${C_RESET} Cancelar"
 
-        local sel_idx=""
-        read -r -p "Selecciona un dominio [1-${total_zones}]: " sel_idx || true
-        if [[ "$sel_idx" == "0" ]]; then
-            echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-            return 0
-        elif [[ "$sel_idx" =~ ^[mM]$ ]]; then
-            read -r -p "Nombre del dominio (ej: midominio.com): " selected_name || true
-            read -r -p "Zone ID de Cloudflare: " selected_id || true
-        elif [[ "$sel_idx" =~ ^[0-9]+$ ]] && (( sel_idx >= 1 && sel_idx <= total_zones )); then
-            local arr_idx=$((sel_idx - 1))
-            selected_name="${zone_names[$arr_idx]}"
-            selected_id="${zone_ids[$arr_idx]}"
-        else
-            echo -e "${C_RED}Opción inválida.${C_RESET}"
-            press_enter
-            return 1
+        local opt_fallback=""
+        read -r -p "Opción [0-3]: " opt_fallback || true
+        case "${opt_fallback:-}" in
+            1)
+                local manual_dom=""
+                read -r -p "Introduce el nombre del dominio en Cloudflare (ej: tudominio.shop): " manual_dom || true
+                manual_dom=$(echo "$manual_dom" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+                if [[ -z "$manual_dom" ]]; then
+                    echo -e "${C_RED}Dominio no ingresado.${C_RESET}"
+                    press_enter
+                    return 1
+                fi
+                echo -e "\n${C_CYAN}Buscando '${manual_dom}' en Cloudflare API...${C_RESET}"
+                local single_zone_raw=""
+                if [[ "$cf_auth_type" == "token" ]]; then
+                    single_zone_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?name=${manual_dom}" \
+                        -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" || echo "")
+                else
+                    single_zone_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?name=${manual_dom}" \
+                        -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json" || echo "")
+                fi
+                local parsed_single
+                parsed_single=$(echo "$single_zone_raw" | cf_parse_zones_py)
+                if [[ "$parsed_single" != ERROR:* && "$parsed_single" != "EMPTY" && -n "$parsed_single" ]]; then
+                    while IFS="|" read -r z_name z_id z_status; do
+                        if [[ -n "$z_name" && -n "$z_id" ]]; then
+                            zone_names+=("$z_name")
+                            zone_ids+=("$z_id")
+                            zone_statuses+=("${z_status:-active}")
+                        fi
+                    done <<< "$parsed_single"
+                else
+                    echo -e "${C_RED}[AVISO] No se pudo obtener el Zone ID automáticamente para '${manual_dom}'.${C_RESET}"
+                    echo -e "${C_YELLOW}Puedes copiar el Zone ID desde dash.cloudflare.com (en la vista de tu dominio, abajo a la derecha).${C_RESET}"
+                    read -r -p "Introduce el Zone ID de Cloudflare (32 caracteres): " selected_id || true
+                    selected_id=$(echo "$selected_id" | tr -d '[:space:]')
+                    if [[ -n "$selected_id" ]]; then
+                        selected_name="$manual_dom"
+                    else
+                        press_enter
+                        return 1
+                    fi
+                fi
+                ;;
+            2)
+                read -r -p "Nombre del dominio (ej: midominio.com): " selected_name || true
+                read -r -p "Zone ID de Cloudflare (32 caracteres): " selected_id || true
+                selected_name=$(echo "$selected_name" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+                selected_id=$(echo "$selected_id" | tr -d '[:space:]')
+                if [[ -z "$selected_name" || -z "$selected_id" ]]; then
+                    echo -e "${C_RED}Datos incompletos.${C_RESET}"
+                    press_enter
+                    return 1
+                fi
+                ;;
+            3)
+                rm -f "$CF_CONF_FILE" 2>/dev/null || true
+                setup_cloudflare
+                return $?
+                ;;
+            *)
+                echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+                return 0
+                ;;
+        esac
+    fi
+
+    local total_zones="${#zone_names[@]}"
+    if [[ -z "$selected_name" || -z "$selected_id" ]]; then
+        if [[ "$total_zones" -eq 1 ]]; then
+            selected_name="${zone_names[0]}"
+            selected_id="${zone_ids[0]}"
+            local stat_label="${C_GREEN}(Estado: Activo)${C_RESET}"
+            if [[ "${zone_statuses[0]}" == "pending" ]]; then
+                stat_label="${C_YELLOW}(Estado: Pendiente de Nameservers)${C_RESET}"
+            fi
+            echo -e "\n${C_GREEN}✔ Dominio detectado en tu cuenta:${C_RESET} ${C_BOLD}${C_CYAN}${selected_name}${C_RESET} ${stat_label}"
+            local use_detected=""
+            read -r -p "¿Deseas utilizar este dominio? [S/n]: " use_detected || true
+            if [[ "${use_detected:-}" =~ ^[nN]$ ]]; then
+                read -r -p "Introduce el nombre del dominio manualmente: " selected_name || true
+                read -r -p "Introduce el Zone ID de Cloudflare: " selected_id || true
+            fi
+        elif [[ "$total_zones" -gt 1 ]]; then
+            echo -e "\n${C_CYAN}Dominios encontrados en tu cuenta de Cloudflare:${C_RESET}"
+            for i in "${!zone_names[@]}"; do
+                local idx=$((i + 1))
+                local stat_label="${C_GREEN}[Activo]${C_RESET}"
+                if [[ "${zone_statuses[$i]}" == "pending" ]]; then
+                    stat_label="${C_YELLOW}[Pendiente de Nameservers]${C_RESET}"
+                fi
+                echo -e "  ${C_YELLOW}[${idx}]${C_RESET} ${C_BOLD}${zone_names[$i]}${C_RESET} ${stat_label}"
+            done
+            echo -e "  ${C_YELLOW}[M]${C_RESET} Ingresar otro dominio y Zone ID manualmente"
+            echo -e "  ${C_RED}[0]${C_RESET} Cancelar"
+
+            local sel_idx=""
+            read -r -p "Selecciona un dominio [1-${total_zones}]: " sel_idx || true
+            if [[ "$sel_idx" == "0" ]]; then
+                echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+                return 0
+            elif [[ "$sel_idx" =~ ^[mM]$ ]]; then
+                read -r -p "Nombre del dominio (ej: midominio.com): " selected_name || true
+                read -r -p "Zone ID de Cloudflare: " selected_id || true
+            elif [[ "$sel_idx" =~ ^[0-9]+$ ]] && (( sel_idx >= 1 && sel_idx <= total_zones )); then
+                local arr_idx=$((sel_idx - 1))
+                selected_name="${zone_names[$arr_idx]}"
+                selected_id="${zone_ids[$arr_idx]}"
+            else
+                echo -e "${C_RED}Opción inválida.${C_RESET}"
+                press_enter
+                return 1
+            fi
         fi
     fi
 
