@@ -59,7 +59,7 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.miservidor.com  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.6.1 - ACTUALIZADO]
+ Versión: [v1.7.0 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
@@ -69,7 +69,7 @@ sudo menu
  [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
  [4] ► PROTOCOLOS Y PUERTOS   (Dropbear, WebSocket Proxy 80, Reiniciar SSH)
  [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
- [6] ► GESTIÓN DE DOMINIO / HOST (Cloudflare API, DuckDNS, Dominio Gratis)
+ [6] ► GESTIÓN DE DOMINIO / HOST (Cloudflare API Auto, DuckDNS, Dominio Gratis)
  [7] ► GUÍA & ASISTENTE HTTP CUSTOM (Asistente CDN, Payloads, Alternativas)
  [8] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
  [9] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
@@ -81,14 +81,19 @@ sudo menu
 
 ## 🌐 Gestión y Creación de Dominios / Host (Cloudflare, DuckDNS, Gratis)
 
-Al igual que en **Darnyx Script** y **VPS-MX**, dispones de un módulo completo para crear y apuntar subdominios hacia la IP de tu VPS, lo cual es fundamental para túneles WebSocket, CDN Cloudflare, SNI y certificados SSL:
+Al igual que en **Darnyx Script** y **VPS-MX**, dispones de un módulo completo y altamente automatizado para crear y apuntar subdominios hacia la IP de tu VPS, lo cual es fundamental para túneles WebSocket, CDN Cloudflare, SNI y certificados SSL:
 
-### 1. Métodos Disponibles en el Menú:
-- **Cloudflare API (Automático):** Ingresa tu API Token o Global Key + Email, selecciona tu dominio y el nombre del subdominio (ej: `vps1.midominio.com`). El script se conecta a la API de Cloudflare, obtiene tu Zone ID y crea el registro tipo **A** de forma automática (con soporte para Proxy Nube Naranja o DNS Gris).
-- **DuckDNS (Dinámico y Gratuito):** Conecta cualquier subdominio `*.duckdns.org` con tu token gratuito. El script actualiza la IP en DuckDNS y configura una tarea automática de renovación periódica.
+### 1. Métodos y Automatizaciones Disponibles:
+- **Cloudflare API Inteligente (Detección Automática de Zonas):**
+  - **Autenticación con 1 clic:** Soporta *Global API Key + Email* o *API Token*. Guarda las credenciales con permisos estrictos (`chmod 600`) para no tener que escribirlas nunca más.
+  - **Detección de Dominios sin escribir nada:** El script consulta la API de Cloudflare y detecta automáticamente tus dominios activos. Si tienes uno solo, lo autoselecciona; si tienes varios, te muestra una lista numerada para elegir con un número. ¡Se acabaron las búsquedas manuales de Zone IDs!
+  - **Sugerencia de Subdominio:** Sugiere por defecto `vps1` (creando `vps1.tudominio.com`).
+  - **Explicación clara de Proxy (Nube Naranja):** Activa por defecto el modo CDN (Proxy: ON) indispensable para los Payloads de **Bug Host en puerto 80**.
+- **DuckDNS (Dinámico y Gratuito):** Conecta cualquier subdominio `*.duckdns.org` con tu token gratuito. El script recuerda tus datos, actualiza la IP y programa un cron job para mantenerlo siempre renovado.
 - **Dominio Gratuito Instantáneo (1-Click sslip.io):** Genera un dominio FQDN válido internacionalmente (ej: `vps-198-51-100-24.sslip.io`) que resuelve hacia la IP de tu VPS en 1 segundo, sin registrar cuentas ni pagar nada.
 - **Asignar Dominio Propio Manualmente:** Guarda un dominio existente que ya hayas apuntado en tu proveedor DNS.
-- **Diagnóstico DNS en Vivo:** Prueba la resolución global de tu dominio utilizando los servidores DNS de Google (`8.8.8.8`) y el resolvedor del sistema.
+- **Guía Educativa Integrada en Terminal:** Nueva opción `[7]` con tutorial completo paso a paso (cómo comprar dominios, cómo cambiar Nameservers, cómo funciona el CDN WebSocket y resolución de problemas).
+- **Diagnóstico DNS en Vivo:** Prueba la resolución global de tu dominio utilizando los servidores DNS de Google (`8.8.8.8`), Cloudflare (`1.1.1.1`) y el resolvedor local, distinguiendo si está en modo Cloudflare CDN o DNS Directo.
 
 ### 2. Atajos Rápidos por Terminal:
 ```bash
@@ -443,11 +448,18 @@ ssh-domain --show
 # Diagnóstico de propagación DNS del dominio actual:
 ssh-domain --check
 
+# Ver la guía y tutorial paso a paso:
+ssh-domain --guide
+
 # Asignar un dominio propio directamente por parámetro:
 sudo ssh-domain --set midominio.com
 
 # Asignar un dominio gratuito instantáneo (sslip.io):
 sudo ssh-domain --instant
+
+# Borrar credenciales guardadas de Cloudflare o DuckDNS:
+sudo ssh-domain --cf-clear
+sudo ssh-domain --duck-clear
 
 # Eliminar el dominio configurado y volver a usar solo la IP:
 sudo ssh-domain --unset

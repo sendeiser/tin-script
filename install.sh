@@ -234,7 +234,7 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.6.1" > /etc/vps-ssh-limiter/version
+echo "1.7.0" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'

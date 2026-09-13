@@ -2,14 +2,16 @@
 # ==============================================================================
 # vps-ssh-limiter: bin/ssh-domain
 # Gestor y creador de dominios y subdominios para el host VPS.
-# Inspirado en Darnyx Script y VPS-MX:
-# Soporta Cloudflare API, DuckDNS (Dinámico), Dominios Gratuitos Instantáneos
-# (sslip.io / nip.io) y vinculación manual de dominios personalizados.
+# Soporta Cloudflare API (Detección automática de zonas y credenciales persistentes),
+# DuckDNS (Dinámico con auto-renovación), Dominios Gratuitos Instantáneos (sslip.io)
+# y vinculación manual de dominios personalizados.
 # ==============================================================================
 set -euo pipefail
 
 DOMAIN_FILE="/etc/vps-ssh-limiter/domain"
 CONFIG_DIR="/etc/vps-ssh-limiter"
+CF_CONF_FILE="/etc/vps-ssh-limiter/cloudflare.conf"
+DUCK_CONF_FILE="/etc/vps-ssh-limiter/duckdns.conf"
 
 if [[ -t 1 ]]; then
     C_RESET="\033[0m"
@@ -21,6 +23,7 @@ if [[ -t 1 ]]; then
     C_BOLD="\033[1m"
     C_GRAY="\033[0;90m"
     C_MAGENTA="\033[1;35m"
+    C_WHITE="\033[1;37m"
 else
     C_RESET=""
     C_RED=""
@@ -31,6 +34,7 @@ else
     C_BOLD=""
     C_GRAY=""
     C_MAGENTA=""
+    C_WHITE=""
 fi
 
 get_public_ip() {
@@ -61,20 +65,175 @@ save_domain() {
     echo "$dom" > "$DOMAIN_FILE"
     echo -e "${C_GREEN}✔ Dominio guardado exitosamente:${C_RESET} ${C_BOLD}${dom}${C_RESET}"
     
-    # Actualizar hostname opcionalmente
+    # Actualizar hostname del sistema opcionalmente
     if command -v hostnamectl >/dev/null 2>&1; then
         hostnamectl set-hostname "$dom" 2>/dev/null || true
     fi
 }
 
 # ------------------------------------------------------------------------------
-# 1. Integración con Cloudflare API (Crea registro A en la zona del usuario)
+# Funciones Auxiliares de JSON para Cloudflare API (Python 3)
+# ------------------------------------------------------------------------------
+cf_parse_zones_py() {
+    python3 -c '
+import sys, json
+
+try:
+    data = json.load(sys.stdin)
+except Exception as ex:
+    print("ERROR:JSON_INVALID:" + str(ex))
+    sys.exit(0)
+
+if not data.get("success"):
+    errs = data.get("errors", [])
+    msg = "; ".join(e.get("message", "") for e in errs) if errs else "Fallo de autenticacion"
+    print("ERROR:" + msg)
+    sys.exit(0)
+
+zones = data.get("result", [])
+if not zones:
+    print("EMPTY")
+    sys.exit(0)
+
+for z in zones:
+    name = str(z.get("name", "")).strip()
+    zid = str(z.get("id", "")).strip()
+    if name and zid:
+        print(name + "|" + zid)
+'
+}
+
+cf_get_rec_id_py() {
+    python3 -c '
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    recs = data.get("result", [])
+    if recs:
+        print(recs[0].get("id", ""))
+except Exception:
+    pass
+'
+}
+
+cf_print_errors_py() {
+    python3 -c '
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for e in data.get("errors", []):
+        print(f" - [{e.get(\"code\", \"?\")}] {e.get(\"message\", \"\")}")
+except Exception:
+    pass
+'
+}
+
+# ------------------------------------------------------------------------------
+# Carga y Autenticación de Cloudflare (Guarda credenciales en servidor)
+# ------------------------------------------------------------------------------
+load_cf_credentials() {
+    cf_auth_type=""
+    cf_email=""
+    cf_key=""
+    cf_token=""
+
+    if [[ -f "$CF_CONF_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$CF_CONF_FILE" 2>/dev/null || true
+        if [[ -n "${CF_AUTH_TYPE:-}" ]]; then
+            echo -e "${C_GREEN}✔ Se encontraron credenciales guardadas de Cloudflare en este servidor.${C_RESET}"
+            if [[ "$CF_AUTH_TYPE" == "token" && -n "${CF_TOKEN:-}" ]]; then
+                local masked_tok="••••••••••••${CF_TOKEN: -4}"
+                echo -e "  Método: ${C_BOLD}API Token${C_RESET} (${masked_tok})"
+            elif [[ "$CF_AUTH_TYPE" == "key" && -n "${CF_KEY:-}" ]]; then
+                local masked_key="••••••••••••${CF_KEY: -4}"
+                echo -e "  Método: ${C_BOLD}Global API Key${C_RESET} (Email: ${CF_EMAIL:-?} | Key: ${masked_key})"
+            fi
+            
+            local use_saved=""
+            read -r -p "¿Deseas utilizar estas credenciales guardadas? [S/n]: " use_saved || true
+            if [[ ! "${use_saved:-}" =~ ^[nN]$ ]]; then
+                cf_auth_type="$CF_AUTH_TYPE"
+                cf_email="${CF_EMAIL:-}"
+                cf_key="${CF_KEY:-}"
+                cf_token="${CF_TOKEN:-}"
+                return 0
+            fi
+        fi
+    fi
+
+    echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║             AUTENTICACIÓN EN CLOUDFLARE API                      ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
+    echo -e "${C_YELLOW}¿Dónde obtener tus credenciales de Cloudflare?${C_RESET}"
+    echo -e " 1. Ingresa a tu panel en: ${C_CYAN}https://dash.cloudflare.com${C_RESET}"
+    echo -e " 2. Arriba a la derecha haz clic en tu perfil > ${C_BOLD}'My Profile' (Mi Perfil)${C_RESET}"
+    echo -e " 3. En la columna izquierda entra a ${C_BOLD}'API Tokens'${C_RESET}"
+    echo -e " 4. Métodos recomendados:"
+    echo -e "    ${C_GREEN}● [1] Global API Key (Más fácil):${C_RESET} En 'Global API Key', clic en 'View' y pon tu contraseña."
+    echo -e "    ${C_GREEN}● [2] API Token:${C_RESET} 'Create Token' > plantilla 'Edit zone DNS' > 'All zones'."
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}\n"
+
+    echo -e "Selecciona el método de autenticación:"
+    echo -e "  ${C_YELLOW}[1]${C_RESET} Global API Key + Correo electrónico (Más sencillo)"
+    echo -e "  ${C_YELLOW}[2]${C_RESET} API Token de Cloudflare (Permiso Zone:DNS:Edit)"
+    echo -e "  ${C_RED}[0]${C_RESET} Cancelar"
+    local opt_auth=""
+    read -r -p "Opción [0-2]: " opt_auth || true
+
+    case "${opt_auth:-}" in
+        1)
+            cf_auth_type="key"
+            read -r -p "Correo de tu cuenta Cloudflare: " cf_email || true
+            read -r -p "Global API Key de Cloudflare: " cf_key || true
+            cf_email=$(echo "$cf_email" | tr -d '[:space:]')
+            cf_key=$(echo "$cf_key" | tr -d '[:space:]')
+            if [[ -z "$cf_email" || -z "$cf_key" ]]; then
+                echo -e "${C_YELLOW}Credenciales incompletas. Operación cancelada.${C_RESET}"
+                return 1
+            fi
+            ;;
+        2)
+            cf_auth_type="token"
+            read -r -p "Introduce tu Cloudflare API Token: " cf_token || true
+            cf_token=$(echo "$cf_token" | tr -d '[:space:]')
+            if [[ -z "$cf_token" ]]; then
+                echo -e "${C_YELLOW}Token vacío. Operación cancelada.${C_RESET}"
+                return 1
+            fi
+            ;;
+        *)
+            echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+            return 1
+            ;;
+    esac
+
+    # Preguntar si guardar credenciales
+    local save_ans=""
+    read -r -p "¿Deseas guardar estas credenciales en el servidor para futuros subdominios? [S/n]: " save_ans || true
+    if [[ ! "${save_ans:-}" =~ ^[nN]$ ]]; then
+        mkdir -p "$CONFIG_DIR"
+        cat > "$CF_CONF_FILE" <<EOF
+CF_AUTH_TYPE="${cf_auth_type}"
+CF_EMAIL="${cf_email}"
+CF_KEY="${cf_key}"
+CF_TOKEN="${cf_token}"
+EOF
+        chmod 600 "$CF_CONF_FILE"
+        echo -e "${C_GREEN}✔ Credenciales guardadas con permisos restringidos (chmod 600).${C_RESET}"
+    fi
+    return 0
+}
+
+# ------------------------------------------------------------------------------
+# 1. Integración Inteligente con Cloudflare API (Detección Automática de Zonas)
 # ------------------------------------------------------------------------------
 setup_cloudflare() {
     echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║             CREAR SUBDOMINIO CON CLOUDFLARE API (A)             ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║     CREAR SUBDOMINIO CON CLOUDFLARE API (DETECCIÓN AUTOMÁTICA)   ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_YELLOW}Crea automáticamente un registro DNS tipo A apuntando a la IP de tu VPS.${C_RESET}\n"
+    echo -e "${C_YELLOW}Crea o actualiza un registro DNS tipo A en tu cuenta de Cloudflare"
+    echo -e "apuntando automáticamente a la IP pública de esta VPS.${C_RESET}\n"
 
     local vps_ip
     vps_ip=$(get_public_ip)
@@ -83,134 +242,212 @@ setup_cloudflare() {
         press_enter
         return 1
     fi
-    echo -e "IP pública detectada: ${C_GREEN}${vps_ip}${C_RESET}\n"
+    echo -e "IP pública detectada: ${C_GREEN}${C_BOLD}${vps_ip}${C_RESET}\n"
 
-    echo -e "Selecciona el método de autenticación en Cloudflare:"
-    echo -e " [1] API Token de Cloudflare (Recomendado con permiso Zone:DNS:Edit)"
-    echo -e " [2] Global API Key + Correo electrónico"
-    echo -e " [0] Cancelar"
-    local auth_opt=""
-    read -r -p "Opción [0-2]: " auth_opt || true
+    # Cargar o pedir credenciales
+    if ! load_cf_credentials; then
+        press_enter
+        return 0
+    fi
 
-    local cf_token="" cf_email="" cf_key="" auth_header=""
-    case "${auth_opt:-}" in
-        1)
-            read -r -p "Introduce tu Cloudflare API Token: " cf_token || true
-            if [[ -z "${cf_token:-}" ]]; then
-                echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-                press_enter
-                return 0
-            fi
-            auth_header="Authorization: Bearer ${cf_token}"
-            ;;
-        2)
-            read -r -p "Correo de tu cuenta Cloudflare: " cf_email || true
-            read -r -p "Global API Key de Cloudflare: " cf_key || true
-            if [[ -z "${cf_email:-}" || -z "${cf_key:-}" ]]; then
-                echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-                press_enter
-                return 0
-            fi
-            ;;
-        *)
+    echo -e "\n${C_CYAN}Conectando con Cloudflare API para consultar tus dominios activos...${C_RESET}"
+
+    local zones_raw=""
+    if [[ "$cf_auth_type" == "token" ]]; then
+        zones_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?status=active&per_page=50" \
+            -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" || echo "")
+    else
+        zones_raw=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones?status=active&per_page=50" \
+            -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json" || echo "")
+    fi
+
+    if [[ -z "$zones_raw" ]]; then
+        echo -e "${C_RED}[ERROR] No se pudo comunicar con los servidores de Cloudflare.${C_RESET}"
+        press_enter
+        return 1
+    fi
+
+    local parsed_zones=""
+    parsed_zones=$(echo "$zones_raw" | cf_parse_zones_py)
+
+    if [[ "$parsed_zones" == ERROR:* ]]; then
+        local err_msg="${parsed_zones#ERROR:}"
+        echo -e "\n${C_RED}[ERROR] Cloudflare rechazó la autenticación:${C_RESET} ${err_msg}"
+        echo -e "${C_YELLOW}Verifica tus credenciales (Token o Global API Key + Email).${C_RESET}"
+        if [[ -f "$CF_CONF_FILE" ]]; then
+            echo -e "${C_GRAY}Puedes borrar las credenciales guardadas desde la opción [8] del menú.${C_RESET}"
+        fi
+        press_enter
+        return 1
+    fi
+
+    if [[ "$parsed_zones" == "EMPTY" || -z "$parsed_zones" ]]; then
+        echo -e "\n${C_YELLOW}⚠ No se encontró ningún dominio activo en tu cuenta de Cloudflare.${C_RESET}\n"
+        echo -e "${C_BOLD}¿Qué debes hacer para poder usar Cloudflare?${C_RESET}"
+        echo -e " 1. Adquiere un dominio (ej: en Namecheap, Hostinger, Nic.ar, DonWeb, etc.)."
+        echo -e " 2. En tu panel de Cloudflare (dash.cloudflare.com), haz clic en ${C_CYAN}'Add a Site'${C_RESET}."
+        echo -e " 3. Cambia los Nameservers en tu proveedor de dominio por los de Cloudflare."
+        echo -e " 4. Cuando el estado figure en verde (${C_GREEN}'Active'${C_RESET}), vuelve a esta opción."
+        echo -e "\n${C_GRAY}Alternativa sin dominio propio: Usa la opción [2] DuckDNS o [3] sslip.io (Instantáneo).${C_RESET}"
+        press_enter
+        return 1
+    fi
+
+    # Cargar zonas en array
+    local zone_names=()
+    local zone_ids=()
+    while IFS="|" read -r z_name z_id; do
+        if [[ -n "$z_name" && -n "$z_id" ]]; then
+            zone_names+=("$z_name")
+            zone_ids+=("$z_id")
+        fi
+    done <<< "$parsed_zones"
+
+    local total_zones="${#zone_names[@]}"
+    local selected_name=""
+    local selected_id=""
+
+    if [[ "$total_zones" -eq 1 ]]; then
+        selected_name="${zone_names[0]}"
+        selected_id="${zone_ids[0]}"
+        echo -e "\n${C_GREEN}✔ Dominio detectado en tu cuenta:${C_RESET} ${C_BOLD}${C_CYAN}${selected_name}${C_RESET}"
+        local use_detected=""
+        read -r -p "¿Deseas utilizar este dominio? [S/n]: " use_detected || true
+        if [[ "${use_detected:-}" =~ ^[nN]$ ]]; then
+            read -r -p "Introduce el nombre del dominio manualmente: " selected_name || true
+            read -r -p "Introduce el Zone ID de Cloudflare: " selected_id || true
+        fi
+    else
+        echo -e "\n${C_CYAN}Dominios activos encontrados en tu cuenta de Cloudflare:${C_RESET}"
+        for i in "${!zone_names[@]}"; do
+            local idx=$((i + 1))
+            echo -e "  ${C_YELLOW}[${idx}]${C_RESET} ${C_BOLD}${zone_names[$i]}${C_RESET}"
+        done
+        echo -e "  ${C_YELLOW}[M]${C_RESET} Ingresar otro dominio y Zone ID manualmente"
+        echo -e "  ${C_RED}[0]${C_RESET} Cancelar"
+
+        local sel_idx=""
+        read -r -p "Selecciona un dominio [1-${total_zones}]: " sel_idx || true
+        if [[ "$sel_idx" == "0" ]]; then
             echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
             return 0
-            ;;
-    esac
+        elif [[ "$sel_idx" =~ ^[mM]$ ]]; then
+            read -r -p "Nombre del dominio (ej: midominio.com): " selected_name || true
+            read -r -p "Zone ID de Cloudflare: " selected_id || true
+        elif [[ "$sel_idx" =~ ^[0-9]+$ ]] && (( sel_idx >= 1 && sel_idx <= total_zones )); then
+            local arr_idx=$((sel_idx - 1))
+            selected_name="${zone_names[$arr_idx]}"
+            selected_id="${zone_ids[$arr_idx]}"
+        else
+            echo -e "${C_RED}Opción inválida.${C_RESET}"
+            press_enter
+            return 1
+        fi
+    fi
 
-    local root_domain=""
-    read -r -p "Dominio principal registrado en Cloudflare (ej: miservidor.com): " root_domain || true
-    if [[ -z "${root_domain:-}" ]]; then
-        echo -e "${C_RED}[ERROR] El dominio no puede estar vacío.${C_RESET}"
+    selected_name=$(echo "$selected_name" | tr -d '[:space:]')
+    selected_id=$(echo "$selected_id" | tr -d '[:space:]')
+
+    if [[ -z "$selected_name" || -z "$selected_id" ]]; then
+        echo -e "${C_RED}[ERROR] Dominio o Zone ID inválido.${C_RESET}"
         press_enter
         return 1
     fi
 
+    # Paso 2: Elegir subdominio
+    echo -e "\n${C_BOLD}Paso 2: Elegir subdominio para la VPS${C_RESET}"
+    echo -e "${C_GRAY}Ejemplo: Si ingresas 'vps1', el host final será: vps1.${selected_name}${C_RESET}"
     local sub_prefix=""
-    read -r -p "Prefijo del subdominio a crear (ej: vps1 para vps1.${root_domain}): " sub_prefix || true
-    if [[ -z "${sub_prefix:-}" ]]; then
-        echo -e "${C_RED}[ERROR] El prefijo no puede estar vacío.${C_RESET}"
-        press_enter
-        return 1
-    fi
+    read -r -p "Introduce el prefijo del subdominio [Por defecto: vps1]: " sub_prefix || true
+    sub_prefix="${sub_prefix:-vps1}"
+    sub_prefix=$(echo "$sub_prefix" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+    local full_domain="${sub_prefix}.${selected_name}"
 
-    local full_domain="${sub_prefix}.${root_domain}"
+    echo -e "Host resultante: ${C_BOLD}${C_GREEN}${full_domain}${C_RESET}"
 
+    # Paso 3: Configurar Proxy de Cloudflare (Nube Naranja CDN vs Nube Gris)
+    echo -e "\n${C_BOLD}Paso 3: Configurar Proxy de Cloudflare (CDN / Nube Naranja)${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_GREEN}● PROXY ACTIVADO (Nube Naranja / Recomendado por defecto):${C_RESET}"
+    echo -e "    El tráfico pasa a través de los servidores CDN de Cloudflare."
+    echo -e "    ${C_YELLOW}OBLIGATORIO${C_RESET} si vas a conectar por ${C_BOLD}HTTP Custom (WebSocket en puerto 80)${C_RESET}"
+    echo -e "    utilizando Bug Host de operadoras (ej: rexo.personal.com.ar)."
+    echo -e "  ${C_GRAY}○ PROXY DESACTIVADO (Nube Gris / DNS Directo):${C_RESET}"
+    echo -e "    Tu dominio apunta directamente a la IP de la VPS sin pasar por CDN."
+    echo -e "    Útil únicamente para conexiones SSH directas (puerto 22) o BadVPN."
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
     local proxy_ans=""
-    read -r -p "¿Deseas activar el Proxy de Cloudflare (CDN / Nube Naranja)? [s/N]: " proxy_ans || true
-    local proxied="false"
-    if [[ "${proxy_ans:-}" =~ ^[sS]$ ]]; then
-        proxied="true"
+    read -r -p "¿Activar Proxy CDN de Cloudflare (Nube Naranja)? [S/n]: " proxy_ans || true
+    local proxied="true"
+    if [[ "${proxy_ans:-}" =~ ^[nN]$ ]]; then
+        proxied="false"
     fi
 
-    echo -e "\n${C_CYAN}Consultando Cloudflare para obtener Zone ID de '${root_domain}'...${C_RESET}"
-
-    local zones_res=""
-    if [[ -n "$cf_token" ]]; then
-        zones_res=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${root_domain}&status=active" \
-            -H "$auth_header" -H "Content-Type: application/json")
-    else
-        zones_res=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${root_domain}&status=active" \
-            -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json")
-    fi
-
-    local zone_id=""
-    zone_id=$(echo "$zones_res" | grep -oP '(?<="id":")[^"]+' | head -n1 || true)
-
-    if [[ -z "$zone_id" ]]; then
-        echo -e "${C_RED}[ERROR] No se pudo encontrar la zona para el dominio '${root_domain}'.${C_RESET}"
-        echo -e "${C_GRAY}Verifica tus credenciales y que el dominio esté activo en Cloudflare.${C_RESET}"
-        press_enter
-        return 1
-    fi
-
-    echo -e "${C_GREEN}✔ Zona encontrada:${C_RESET} ID $zone_id"
-    echo -e "${C_CYAN}Creando registro DNS tipo A para '${full_domain}' -> ${vps_ip} (Proxy: ${proxied})...${C_RESET}"
-
-    # Comprobar si el registro ya existe
+    # Paso 4: Crear o actualizar registro DNS
+    echo -e "\n${C_CYAN}Verificando si el registro '${full_domain}' ya existe en Cloudflare...${C_RESET}"
     local rec_check=""
-    if [[ -n "$cf_token" ]]; then
-        rec_check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${full_domain}&type=A" \
-            -H "$auth_header" -H "Content-Type: application/json")
+    if [[ "$cf_auth_type" == "token" ]]; then
+        rec_check=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones/${selected_id}/dns_records?name=${full_domain}&type=A" \
+            -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" || echo "")
     else
-        rec_check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${full_domain}&type=A" \
-            -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json")
+        rec_check=$(curl -s -m 12 -X GET "https://api.cloudflare.com/client/v4/zones/${selected_id}/dns_records?name=${full_domain}&type=A" \
+            -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json" || echo "")
     fi
 
     local rec_id=""
-    rec_id=$(echo "$rec_check" | grep -oP '(?<="id":")[^"]+' | head -n1 || true)
+    rec_id=$(echo "$rec_check" | cf_get_rec_id_py || echo "")
 
     local create_res=""
     if [[ -n "$rec_id" ]]; then
-        echo -e "${C_YELLOW}[AVISO] El registro ya existe. Actualizando registro existente (ID: $rec_id)...${C_RESET}"
-        if [[ -n "$cf_token" ]]; then
-            create_res=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${rec_id}" \
-                -H "$auth_header" -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"${full_domain}\",\"content\":\"${vps_ip}\",\"ttl\":1,\"proxied\":${proxied}}")
+        echo -e "${C_YELLOW}[AVISO] El registro DNS ya existe (ID: ${rec_id}). Actualizando a IP ${vps_ip} (Proxy: ${proxied})...${C_RESET}"
+        local update_payload="{\"type\":\"A\",\"name\":\"${full_domain}\",\"content\":\"${vps_ip}\",\"ttl\":1,\"proxied\":${proxied}}"
+        if [[ "$cf_auth_type" == "token" ]]; then
+            create_res=$(curl -s -m 12 -X PUT "https://api.cloudflare.com/client/v4/zones/${selected_id}/dns_records/${rec_id}" \
+                -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" \
+                --data "$update_payload" || echo "")
         else
-            create_res=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${rec_id}" \
+            create_res=$(curl -s -m 12 -X PUT "https://api.cloudflare.com/client/v4/zones/${selected_id}/dns_records/${rec_id}" \
                 -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"${full_domain}\",\"content\":\"${vps_ip}\",\"ttl\":1,\"proxied\":${proxied}}")
+                --data "$update_payload" || echo "")
         fi
     else
-        if [[ -n "$cf_token" ]]; then
-            create_res=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
-                -H "$auth_header" -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"${full_domain}\",\"content\":\"${vps_ip}\",\"ttl\":1,\"proxied\":${proxied}}")
+        echo -e "${C_CYAN}Creando nuevo registro DNS tipo A en Cloudflare...${C_RESET}"
+        local create_payload="{\"type\":\"A\",\"name\":\"${full_domain}\",\"content\":\"${vps_ip}\",\"ttl\":1,\"proxied\":${proxied}}"
+        if [[ "$cf_auth_type" == "token" ]]; then
+            create_res=$(curl -s -m 12 -X POST "https://api.cloudflare.com/client/v4/zones/${selected_id}/dns_records" \
+                -H "Authorization: Bearer ${cf_token}" -H "Content-Type: application/json" \
+                --data "$create_payload" || echo "")
         else
-            create_res=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+            create_res=$(curl -s -m 12 -X POST "https://api.cloudflare.com/client/v4/zones/${selected_id}/dns_records" \
                 -H "X-Auth-Email: ${cf_email}" -H "X-Auth-Key: ${cf_key}" -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"${full_domain}\",\"content\":\"${vps_ip}\",\"ttl\":1,\"proxied\":${proxied}}")
+                --data "$create_payload" || echo "")
         fi
     fi
 
     if echo "$create_res" | grep -q '"success":true'; then
-        echo -e "\n${C_GREEN}${C_BOLD}✔ ¡Subdominio creado con éxito en Cloudflare!${C_RESET}"
-        echo -e "Dominio: ${C_BOLD}${C_CYAN}${full_domain}${C_RESET} -> ${vps_ip}"
+        echo -e "\n${C_GREEN}${C_BOLD}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_GREEN}${C_BOLD}║      ✔ ¡SUBDOMINIO CONFIGURADO EXITOSAMENTE EN CLOUDFLARE!       ║${C_RESET}"
+        echo -e "${C_GREEN}${C_BOLD}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+        echo -e "  • Dominio / Host:   ${C_CYAN}${C_BOLD}${full_domain}${C_RESET}"
+        echo -e "  • IP Destino (VPS): ${C_YELLOW}${vps_ip}${C_RESET}"
+        local proxy_desc="${C_GREEN}ACTIVADO (Nube Naranja - Cloudflare CDN WebSocket)${C_RESET}"
+        if [[ "$proxied" != "true" ]]; then
+            proxy_desc="${C_YELLOW}DESACTIVADO (Nube Gris - DNS Directo a VPS)${C_RESET}"
+        fi
+        echo -e "  • Estado Proxy:     ${proxy_desc}\n"
+
+        if [[ "$proxied" == "true" ]]; then
+            echo -e "${C_BOLD}Uso en HTTP Custom / WebSocket CDN (Puerto 80):${C_RESET}"
+            echo -e "  1. En tu app HTTP Custom:"
+            echo -e "     - Server / Host:   ${C_CYAN}${full_domain}:80${C_RESET} (o IP de Cloudflare CDN)"
+            echo -e "     - Payload Host:    ${C_GREEN}Host: ${full_domain}${C_RESET}"
+            echo -e "  2. Puedes usar el asistente automático escribiendo: ${C_BOLD}sudo http-custom${C_RESET}\n"
+        fi
+
         save_domain "$full_domain"
     else
         echo -e "\n${C_RED}[ERROR] Cloudflare rechazó la solicitud:${C_RESET}"
-        echo "$create_res" | grep -oP '(?<="message":")[^"]+' || echo "$create_res"
+        echo "$create_res" | cf_print_errors_py || echo "$create_res"
     fi
     press_enter
 }
@@ -226,35 +463,68 @@ setup_duckdns() {
 
     local vps_ip
     vps_ip=$(get_public_ip)
-    echo -e "IP pública: ${C_GREEN}${vps_ip}${C_RESET}\n"
+    echo -e "IP pública detectada: ${C_GREEN}${C_BOLD}${vps_ip}${C_RESET}\n"
 
     local duck_sub="" duck_token=""
-    read -r -p "Subdominio de DuckDNS (solo el nombre, ej: 'miservidor' para miservidor.duckdns.org): " duck_sub || true
-    if [[ -z "${duck_sub:-}" ]]; then
-        echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-        press_enter
-        return 0
+    if [[ -f "$DUCK_CONF_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$DUCK_CONF_FILE" 2>/dev/null || true
+        if [[ -n "${DUCK_SUB:-}" && -n "${DUCK_TOKEN:-}" ]]; then
+            local masked_tok="••••••••••••${DUCK_TOKEN: -4}"
+            echo -e "${C_GREEN}✔ Datos guardados de DuckDNS encontrados:${C_RESET}"
+            echo -e "  Subdominio: ${C_BOLD}${DUCK_SUB}.duckdns.org${C_RESET} (Token: ${masked_tok})"
+            local use_saved_duck=""
+            read -r -p "¿Deseas actualizar con estos mismos datos? [S/n]: " use_saved_duck || true
+            if [[ ! "${use_saved_duck:-}" =~ ^[nN]$ ]]; then
+                duck_sub="$DUCK_SUB"
+                duck_token="$DUCK_TOKEN"
+            fi
+        fi
     fi
 
-    read -r -p "Token de DuckDNS (copiar desde duckdns.org): " duck_token || true
-    if [[ -z "${duck_token:-}" ]]; then
-        echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-        press_enter
-        return 0
+    if [[ -z "$duck_sub" || -z "$duck_token" ]]; then
+        echo -e "${C_YELLOW}¿Cómo obtener un subdominio y token en DuckDNS?${C_RESET}"
+        echo -e " 1. Ingresa a: ${C_CYAN}https://www.duckdns.org${C_RESET} e inicia sesión con tu cuenta de Google."
+        echo -e " 2. En la parte superior de la página verás tu ${C_BOLD}'token'${C_RESET} privado."
+        echo -e " 3. En la sección 'domains', escribe el subdominio que desees (ej: 'miservidor') y pulsa 'add domain'."
+        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}\n"
+
+        read -r -p "Subdominio de DuckDNS (solo el nombre, ej: 'miservidor'): " duck_sub || true
+        duck_sub=$(echo "$duck_sub" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+        if [[ -z "$duck_sub" ]]; then
+            echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+            press_enter
+            return 0
+        fi
+
+        read -r -p "Token privado de DuckDNS: " duck_token || true
+        duck_token=$(echo "$duck_token" | tr -d '[:space:]')
+        if [[ -z "$duck_token" ]]; then
+            echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+            press_enter
+            return 0
+        fi
     fi
 
     echo -e "\n${C_CYAN}Actualizando IP en DuckDNS...${C_RESET}"
     local duck_res
-    duck_res=$(curl -s -m 5 "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=${vps_ip}" || true)
+    duck_res=$(curl -s -m 8 "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=${vps_ip}" || true)
 
     if [[ "$duck_res" == "OK" ]]; then
         local full_domain="${duck_sub}.duckdns.org"
         echo -e "${C_GREEN}${C_BOLD}✔ ¡DuckDNS actualizado correctamente!${C_RESET}"
-        echo -e "Tu dominio es: ${C_BOLD}${C_CYAN}${full_domain}${C_RESET}"
+        echo -e "Tu dominio es: ${C_BOLD}${C_CYAN}${full_domain}${C_RESET} -> ${vps_ip}"
+
+        # Guardar credenciales de DuckDNS
+        mkdir -p "$CONFIG_DIR"
+        cat > "$DUCK_CONF_FILE" <<EOF
+DUCK_SUB="${duck_sub}"
+DUCK_TOKEN="${duck_token}"
+EOF
+        chmod 600 "$DUCK_CONF_FILE"
 
         # Configurar cron job para mantener la IP actualizada automáticamente cada 4 horas
         local cron_script="/etc/vps-ssh-limiter/duckdns_update.sh"
-        mkdir -p "$CONFIG_DIR"
         cat > "$cron_script" <<EOF
 #!/usr/bin/env bash
 curl -s "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=" >/dev/null 2>&1
@@ -264,7 +534,7 @@ EOF
         # Añadir al crontab si no existe
         if command -v crontab >/dev/null 2>&1; then
             ( crontab -l 2>/dev/null | grep -v "$cron_script" ; echo "0 */4 * * * $cron_script >/dev/null 2>&1" ) | crontab - 2>/dev/null || true
-            echo -e "${C_GRAY}Cron job programado para renovación automática de DNS.${C_RESET}"
+            echo -e "${C_GRAY}✔ Cron job programado para renovación automática cada 4 horas.${C_RESET}"
         fi
 
         save_domain "$full_domain"
@@ -282,8 +552,8 @@ setup_instant_domain() {
     echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}║       DOMINIO GRATUITO INSTANTÁNEO (1-CLICK SSLIP.IO)            ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_YELLOW}Genera un dominio FQDN válido internacionalmente que resuelve de forma"
-    echo -e "instantánea hacia tu IP sin registrar cuentas, ni pagar nada.${C_RESET}\n"
+    echo -e "${C_YELLOW}sslip.io es un servicio de DNS Wildcard gratuito que convierte tu IP"
+    echo -e "en un dominio FQDN válido internacionalmente sin registrar cuentas ni esperar.${C_RESET}\n"
 
     local vps_ip
     vps_ip=$(get_public_ip)
@@ -293,7 +563,7 @@ setup_instant_domain() {
         return 1
     fi
 
-    echo -e "IP pública: ${C_GREEN}${vps_ip}${C_RESET}"
+    echo -e "IP pública detectada: ${C_GREEN}${C_BOLD}${vps_ip}${C_RESET}"
     local ip_dash="${vps_ip//./-}"
     local instant_dom="vps-${ip_dash}.sslip.io"
 
@@ -322,7 +592,7 @@ setup_manual_domain() {
     echo -e "${C_BOLD}${C_CYAN}║             ASIGNAR DOMINIO PROPIO MANUALMENTE                  ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
     echo -e "${C_YELLOW}Utiliza esta opción si ya compraste tu dominio y creaste el registro"
-    echo -e "tipo 'A' apuntando a la IP de tu VPS en tu proveedor DNS.${C_RESET}\n"
+    echo -e "tipo 'A' apuntando a la IP de tu VPS en tu registrador o panel DNS.${C_RESET}\n"
 
     local vps_ip
     vps_ip=$(get_public_ip)
@@ -347,10 +617,10 @@ setup_manual_domain() {
         echo -e "${C_GREEN}✔ ¡Verificación exitosa! El dominio ya apunta a este servidor.${C_RESET}"
         save_domain "$man_domain"
     else
-        echo -e "${C_YELLOW}[AVISO] El dominio apunta a '$resolved_ip' (o aún no resuelve a ${vps_ip}).${C_RESET}"
+        echo -e "${C_YELLOW}[AVISO] El dominio resuelve a: '${resolved_ip:-Sin respuesta}' (IP VPS: ${vps_ip}).${C_RESET}"
         echo -e "¿Deseas guardarlo de todos modos? (Útil si acabas de crear el DNS y está propagando)"
         local force_save=""
-        read -r -p "¿Guardar dominio? [s/N]: " force_save || true
+        read -r -p "¿Guardar dominio de todos modos? [s/N]: " force_save || true
         if [[ "${force_save:-}" =~ ^[sS]$ ]]; then
             save_domain "$man_domain"
         else
@@ -361,7 +631,7 @@ setup_manual_domain() {
 }
 
 # ------------------------------------------------------------------------------
-# 5. Comprobación y Diagnóstico DNS
+# 5. Comprobación y Diagnóstico DNS Avanzado
 # ------------------------------------------------------------------------------
 check_dns_status() {
     clear
@@ -379,25 +649,29 @@ check_dns_status() {
         echo -e "Dominio configurado:  ${C_GRAY}(Ninguno - Utilizando IP directa)${C_RESET}"
     else
         echo -e "Dominio configurado:  ${C_GREEN}${C_BOLD}${current_dom}${C_RESET}"
-        echo -e "\n${C_CYAN}Probando resolución global con Google DNS (8.8.8.8)...${C_RESET}"
+        echo -e "\n${C_CYAN}Consultando servidores DNS globales (Google 8.8.8.8 y Cloudflare 1.1.1.1)...${C_RESET}"
         local google_dns=""
         if command -v dig >/dev/null 2>&1; then
-            google_dns=$(dig +short "@8.8.8.8" "$current_dom" 2>/dev/null || true)
+            google_dns=$(dig +short "@8.8.8.8" "$current_dom" 2>/dev/null | tr '\n' ' ' || true)
         elif command -v nslookup >/dev/null 2>&1; then
-            google_dns=$(nslookup "$current_dom" 8.8.8.8 2>/dev/null | grep -A1 "Name:" | awk '/Address:/ {print $2}' || true)
+            google_dns=$(nslookup "$current_dom" 8.8.8.8 2>/dev/null | awk '/Address:/ {print $2}' | tail -n+2 | tr '\n' ' ' || true)
         fi
-        echo -e "Respuesta DNS: ${C_BOLD}${google_dns:-Sin respuesta o dig no disponible}${C_RESET}"
+        echo -e "Respuesta DNS público: ${C_BOLD}${google_dns:-Sin respuesta o consulta no disponible}${C_RESET}"
 
-        echo -e "\n${C_CYAN}Probando resolución local del sistema...${C_RESET}"
+        echo -e "\n${C_CYAN}Probando resolución local en el sistema...${C_RESET}"
         local local_res=""
         local_res=$(getent ahosts "$current_dom" 2>/dev/null | awk '{print $1}' | head -n1 || echo "")
-        echo -e "Resolución local: ${C_BOLD}${local_res:-No resuelve}${C_RESET}"
+        echo -e "Resolución local:      ${C_BOLD}${local_res:-No resuelve}${C_RESET}"
 
-        if [[ "$local_res" == "$vps_ip" || "$google_dns" == *"$vps_ip"* ]]; then
-            echo -e "\n${C_GREEN}✔ El dominio resuelve correctamente hacia esta VPS.${C_RESET}"
+        echo -e "\n${C_BOLD}Diagnóstico:${C_RESET}"
+        if [[ "$google_dns" == *"104."* || "$google_dns" == *"172.67."* || "$google_dns" == *"172.64."* || "$google_dns" == *"162.159."* ]]; then
+            echo -e "${C_GREEN}✔ El dominio resuelve a Cloudflare CDN (IPs Anycast de Cloudflare).${C_RESET}"
+            echo -e "${C_GREEN}  El Proxy (Nube Naranja) está funcionando perfectamente para WebSocket / HTTP Custom.${C_RESET}"
+        elif [[ "$local_res" == "$vps_ip" || "$google_dns" == *"$vps_ip"* ]]; then
+            echo -e "${C_GREEN}✔ El dominio resuelve directamente hacia la IP pública de esta VPS (Modo DNS Directo).${C_RESET}"
         else
-            echo -e "\n${C_YELLOW}[AVISO] Si acabas de apuntar el dominio, recuerda que la propagación mundial"
-            echo -e "puede tardar entre 2 y 15 minutos.${C_RESET}"
+            echo -e "${C_YELLOW}⚠ El dominio aún no responde o apunta a otra dirección.${C_RESET}"
+            echo -e "${C_GRAY}Si acabas de modificar el registro, recuerda que la propagación DNS mundial puede tardar de 2 a 15 minutos.${C_RESET}"
         fi
     fi
     press_enter
@@ -414,7 +688,7 @@ delete_domain() {
         echo -e "${C_YELLOW}No hay ningún dominio configurado actualmente.${C_RESET}"
     else
         echo -e "\n${C_BOLD}${C_RED}¿Está seguro de eliminar el dominio '${current_dom}'?${C_RESET}"
-        echo -e "El sistema volverá a mostrar la IP pública en el menú y las fichas."
+        echo -e "El sistema volverá a mostrar la IP pública en el menú y las fichas de usuarios."
         local conf_del=""
         read -r -p "Confirmar eliminación [s/N]: " conf_del || true
         if [[ "${conf_del:-}" =~ ^[sS]$ ]]; then
@@ -424,6 +698,136 @@ delete_domain() {
             echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
         fi
     fi
+    press_enter
+}
+
+# ------------------------------------------------------------------------------
+# 7. Guía Educativa Paso a Paso
+# ------------------------------------------------------------------------------
+show_domain_guide() {
+    clear
+    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║     GUÍA COMPLETA: CÓMO CREAR, CONFIGURAR Y USAR DOMINIOS EN TU VPS      ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}1. ¿POR QUÉ NECESITAS UN DOMINIO EN TU SERVIDOR VPS?${C_RESET}"
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "  • ${C_GREEN}WebSocket Cloudflare CDN (HTTP Custom en puerto 80):${C_RESET}"
+    echo -e "    Las aplicaciones como HTTP Custom usan trucos de 'Bug Host' (SNI) de"
+    echo -e "    operadoras móviles (ej: Personal, Claro, Movistar, WhatsApp ilimitado)."
+    echo -e "    Para que la operadora no cobre datos y Cloudflare sepa hacia qué VPS"
+    echo -e "    enviar la conexión, se necesita un dominio con Proxy activado (Nube Naranja)."
+    echo -e "  • ${C_GREEN}Flexibilidad total:${C_RESET} Si cambias de servidor VPS o tu proveedor cambia"
+    echo -e "    tu IP pública, solo actualizas el registro DNS y tus clientes reconectan"
+    echo -e "    sin tener que reinstalar ni volver a configurar sus aplicaciones.\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}2. ¿CÓMO FUNCIONA LA CONEXIÓN WEBSOCKET CDN (PUERTO 80)?${C_RESET}"
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "  [Tu Celular / HTTP Custom]"
+    echo -e "       │"
+    echo -e "       ▼ (Petición HTTP con Bug Host de la operadora)"
+    echo -e "  [Red Móvil / Bug Host (ej: rexo.personal.com.ar)] -> Datos Cero / WhatsApp"
+    echo -e "       │"
+    echo -e "       ▼ (Payload lleva cabecera 'Host: vps1.tudominio.com')"
+    echo -e "  [Cloudflare CDN (Nube Naranja)] -> Busca el subdominio 'vps1.tudominio.com'"
+    echo -e "       │"
+    echo -e "       ▼ (Upgrade WebSocket a través de puerto 80)"
+    echo -e "  [Tu VPS (Puerto 80: ssh-wsproxy -> Dropbear:143)] -> ¡Túnel Establecido!\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}3. TUTORIAL: CONFIGURAR DOMINIO PROPIO EN CLOUDFLARE DESDE CERO${C_RESET}"
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "  ${C_BOLD}Paso A: Registrar un dominio propio${C_RESET}"
+    echo -e "    Compra un dominio económico (ej: .shop, .xyz, .top, .com) en registradores"
+    echo -e "    como Namecheap, Hostinger, DonWeb, GoDaddy, Nic.ar, etc."
+    echo -e "  ${C_BOLD}Paso B: Agregar el dominio a Cloudflare (100% Gratis)${C_RESET}"
+    echo -e "    1. Crea una cuenta gratuita en ${C_CYAN}https://dash.cloudflare.com${C_RESET}."
+    echo -e "    2. En el inicio haz clic en ${C_BOLD}'Add a site'${C_RESET} y escribe tu dominio."
+    echo -e "    3. Elige el ${C_BOLD}Plan Gratuito (Free \$0)${C_RESET} al final de la lista de planes."
+    echo -e "  ${C_BOLD}Paso C: Cambiar los NameServers${C_RESET}"
+    echo -e "    Cloudflare te mostrará 2 servidores de nombres (ej: 'aria.ns.cloudflare.com')."
+    echo -e "    Entra a la página donde compraste el dominio y cambia los DNS por los de Cloudflare."
+    echo -e "  ${C_BOLD}Paso D: Esperar la activación (5 a 15 minutos)${C_RESET}"
+    echo -e "    Cuando Cloudflare marque tu dominio con una tilde verde (${C_GREEN}'Active'${C_RESET}),"
+    echo -e "    ¡ya puedes usar la opción [1] de este autoscript para crear subdominios automáticamente!\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}4. ¿DÓNDE OBTENER TUS CREDENCIALES DE CLOUDFLARE?${C_RESET}"
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "  1. Entra a tu panel de Cloudflare (${C_CYAN}https://dash.cloudflare.com${C_RESET})."
+    echo -e "  2. Arriba a la derecha haz clic en el ícono de perfil -> ${C_BOLD}'My Profile'${C_RESET}."
+    echo -e "  3. En la columna izquierda haz clic en ${C_BOLD}'API Tokens'${C_RESET}."
+    echo -e "  4. ${C_GREEN}MÉTODO RECOMENDADO (Más fácil):${C_RESET}"
+    echo -e "     En la sección 'Global API Key', haz clic en ${C_BOLD}'View'${C_RESET}, pon tu contraseña y copia la clave."
+    echo -e "     Luego en el script seleccionas opción 1 (Global Key) e ingresas tu correo y esa clave."
+    echo -e "     ${C_GRAY}(El script guarda tus credenciales para que no tengas que escribirlas de nuevo).${C_RESET}\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}5. NUBE NARANJA (PROXY CDN) VS NUBE GRIS (DNS DIRECTO)${C_RESET}"
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "  • ${C_GREEN}Nube Naranja (Proxy: ON):${C_RESET} OBLIGATORIO para payloads HTTP Custom / WebSocket"
+    echo -e "    en puerto 80 con Bug Host. Cloudflare enmascara tu IP y distribuye el tráfico."
+    echo -e "  • ${C_GRAY}Nube Gris (DNS Only):${C_RESET} No usa CDN. Apunta directo a la IP de tu servidor."
+    echo -e "    Se usa solo para SSH directo (puerto 22) o juegos/BadVPN.\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}6. ¿NO TIENES DOMINIO PROPIO? ALTERNATIVAS GRATUITAS${C_RESET}"
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    echo -e "  • ${C_CYAN}DuckDNS (Opción 2):${C_RESET} Regístrate gratis en duckdns.org con tu cuenta de Google."
+    echo -e "    Te da un subdominio gratis (ej: tunombre.duckdns.org) y el script lo actualiza solo."
+    echo -e "  • ${C_CYAN}sslip.io (Opción 3):${C_RESET} ¡Cero cuentas y cero esperas! Genera al instante un"
+    echo -e "    dominio válido internacionalmente que resuelve a tu IP pública en 1 clic."
+    echo -e "──────────────────────────────────────────────────────────────────────────"
+    press_enter
+}
+
+# ------------------------------------------------------------------------------
+# 8. Administrar Credenciales Guardadas
+# ------------------------------------------------------------------------------
+manage_saved_credentials() {
+    clear
+    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║            ADMINISTRAR CREDENCIALES GUARDADAS                    ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "Estado de credenciales en el servidor:"
+    if [[ -f "$CF_CONF_FILE" ]]; then
+        echo -e "  • Cloudflare: ${C_GREEN}Guardadas${C_RESET} (${CF_CONF_FILE})"
+    else
+        echo -e "  • Cloudflare: ${C_GRAY}No guardadas${C_RESET}"
+    fi
+
+    if [[ -f "$DUCK_CONF_FILE" ]]; then
+        echo -e "  • DuckDNS:    ${C_GREEN}Guardadas${C_RESET} (${DUCK_CONF_FILE})"
+    else
+        echo -e "  • DuckDNS:    ${C_GRAY}No guardadas${C_RESET}"
+    fi
+
+    echo -e "\nOpciones disponibles:"
+    echo -e "  ${C_YELLOW}[1]${C_RESET} Borrar credenciales de Cloudflare"
+    echo -e "  ${C_YELLOW}[2]${C_RESET} Borrar credenciales de DuckDNS"
+    echo -e "  ${C_YELLOW}[3]${C_RESET} Borrar todas las credenciales"
+    echo -e "  ${C_RED}[0]${C_RESET} Volver"
+
+    local opt_cred=""
+    read -r -p "Seleccione una opción [0-3]: " opt_cred || true
+
+    case "${opt_cred:-}" in
+        1)
+            rm -f "$CF_CONF_FILE"
+            echo -e "${C_GREEN}✔ Credenciales de Cloudflare eliminadas.${C_RESET}"
+            ;;
+        2)
+            rm -f "$DUCK_CONF_FILE"
+            echo -e "${C_GREEN}✔ Credenciales de DuckDNS eliminadas.${C_RESET}"
+            ;;
+        3)
+            rm -f "$CF_CONF_FILE" "$DUCK_CONF_FILE"
+            echo -e "${C_GREEN}✔ Todas las credenciales han sido eliminadas.${C_RESET}"
+            ;;
+        0)
+            return 0
+            ;;
+        *)
+            echo -e "${C_RED}Opción inválida.${C_RESET}"
+            ;;
+    esac
     press_enter
 }
 
@@ -445,16 +849,18 @@ main_menu() {
         echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
         echo -e " Host activo: ${dom_badge}"
         echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Crear subdominio con Cloudflare API (Automático)"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} Crear subdominio Cloudflare API (Detección automática de zonas)"
         echo -e "  ${C_YELLOW}[2]${C_RESET} Vincular dominio dinámico DuckDNS (Gratuito *.duckdns.org)"
         echo -e "  ${C_YELLOW}[3]${C_RESET} Generar dominio gratuito instantáneo (1-Click sslip.io)"
         echo -e "  ${C_YELLOW}[4]${C_RESET} Asignar / Cambiar dominio manualmente (Tu propio dominio)"
         echo -e "  ${C_YELLOW}[5]${C_RESET} Comprobar estado y diagnóstico DNS del dominio"
         echo -e "  ${C_YELLOW}[6]${C_RESET} Eliminar dominio actual y volver a IP pública"
+        echo -e "  ${C_CYAN}[7]${C_RESET} Guía paso a paso: ¿Cómo crear y configurar un dominio?"
+        echo -e "  ${C_YELLOW}[8]${C_RESET} Administrar / Borrar credenciales guardadas"
         echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
         echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
         local opt_dom=""
-        read -r -p "Seleccione una opción [0-6]: " opt_dom || true
+        read -r -p "Seleccione una opción [0-8]: " opt_dom || true
 
         case "${opt_dom:-}" in
             1) setup_cloudflare ;;
@@ -463,6 +869,8 @@ main_menu() {
             4) setup_manual_domain ;;
             5) check_dns_status ;;
             6) delete_domain ;;
+            7) show_domain_guide ;;
+            8) manage_saved_credentials ;;
             0) break ;;
             *)
                 echo -e "${C_RED}Opción inválida.${C_RESET}"
@@ -501,6 +909,17 @@ case "${1:-}" in
         inst_dom="vps-${i_dash}.sslip.io"
         save_domain "$inst_dom"
         ;;
+    --guide)
+        show_domain_guide
+        ;;
+    --cf-clear)
+        rm -f "$CF_CONF_FILE"
+        echo -e "${C_GREEN}✔ Credenciales de Cloudflare eliminadas.${C_RESET}"
+        ;;
+    --duck-clear)
+        rm -f "$DUCK_CONF_FILE"
+        echo -e "${C_GREEN}✔ Credenciales de DuckDNS eliminadas.${C_RESET}"
+        ;;
     --unset)
         rm -f "$DOMAIN_FILE"
         echo -e "${C_GREEN}✔ Dominio eliminado. El servidor ha vuelto a modo IP pública.${C_RESET}"
@@ -509,4 +928,3 @@ case "${1:-}" in
         main_menu
         ;;
 esac
-
