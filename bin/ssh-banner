@@ -197,107 +197,115 @@ generate_banner_text() {
     local u_name="$U_NAME"
     local u_exp="$U_EXP"
     local u_days="$U_DAYS"
-    local u_traffic="$U_TRAFFIC"
     local u_limit="$U_LIMIT"
+
+    # Construcción inteligente de Hipervínculo para HTTP Custom / HTML
+    local link_url=""
+    local link_text=""
+    if [[ "$c_info" =~ ^https?:// ]]; then
+        link_url="$c_info"
+        if [[ "$c_info" == *"t.me"* ]]; then
+            link_text="Telegram Soporte"
+        elif [[ "$c_info" == *"wa.me"* || "$c_info" == *"whatsapp"* ]]; then
+            link_text="WhatsApp Soporte"
+        else
+            link_text="Click Aquí para Contactar"
+        fi
+    elif [[ "$c_info" =~ ^@ ]]; then
+        local tg_user="${c_info#@}"
+        link_url="https://t.me/${tg_user}"
+        link_text="Telegram (@${tg_user})"
+    elif [[ "$c_info" =~ ^t\.me/ ]]; then
+        link_url="https://${c_info}"
+        link_text="Telegram (${c_info#t.me/})"
+    elif [[ "$c_info" =~ ^wa\.me/ ]]; then
+        link_url="https://${c_info}"
+        link_text="WhatsApp (${c_info#wa.me/})"
+    else
+        local clean_num
+        clean_num=$(echo "$c_info" | tr -cd '0-9')
+        if [[ -n "$clean_num" && ${#clean_num} -ge 7 ]]; then
+            link_url="https://wa.me/${clean_num}"
+            link_text="WhatsApp (${c_info})"
+        else
+            link_url="https://t.me/${c_info}"
+            link_text="Contacto: ${c_info}"
+        fi
+    fi
 
     case "$t_id" in
         1)
-            # Plantilla 1: ★ INFORMACIÓN DE TU CUENTA ★ (HTML Pro Neón Cyan & Oro - Recomendado)
+            # Plantilla 1: ★ INFORMACIÓN DE TU CUENTA ★ (HTML Neón Cyan & Oro - Compacto con Hipervínculo)
             cat <<EOF
 <center><font color="#00E5FF"><b>╔═══════════════════════════════════╗</b></font><br>
 <font color="#FFD700"><b>★ INFORMACIÓN DE TU CUENTA ★</b></font><br>
 <font color="#00E5FF"><b>╚═══════════════════════════════════╝</b></font></center><br>
 <font color="#00E5FF">● <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
-<font color="#00E5FF">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00E5FF">(${u_days})</font><br>
-<font color="#00E5FF">● <b>Conexiones:</b></font> <font color="#FF00FF"><b>${u_limit} permitido(s)</b></font><br>
-<font color="#00E5FF">● <b>Datos Usados:</b></font> <font color="#39FF14"><b>${u_traffic}</b></font><br>
-<font color="#00E5FF">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} (Alta Velocidad)</font><br>
-<font color="#00E5FF">● <b>Estado:</b></font> <font color="#39FF14"><b>ACTIVO Y OPTIMIZADO</b></font><br>
-<font color="#00E5FF">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#00E5FF">● <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
+<font color="#00E5FF">● <b>Vence:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00E5FF">(${u_days})</font><br>
+<font color="#00E5FF">● <b>Límite:</b></font> <font color="#FFD700"><b>${u_limit} Conexión(es)</b></font><br>
+<font color="#00E5FF">● <b>Soporte:</b></font> <a href="${link_url}"><font color="#00FFCC"><b><u>${link_text}</u></b></font></a><br>
 <font color="#888888">─────────────────────────────────────</font><br>
-<center><font color="#FF3366">⚠️ <b>${rules}</b></font><br>
-<font color="#00E5FF"><b>★ Conexión Segura y de Alta Calidad ★</b></font></center>
+<center><font color="#FF3366">⚠️ <b>${rules}</b></font></center>
 EOF
             ;;
         2)
-            # Plantilla 2: ★ VIP GOLD PREMIUM ★ (HTML Neón Dorado & Naranja Lujo)
+            # Plantilla 2: ★ VIP GOLD PREMIUM ★ (HTML Neón Dorado & Naranja Lujo con Hipervínculo)
             cat <<EOF
 <center><font color="#FFD700"><b>╔═══════════════════════════════════╗</b></font><br>
 <font color="#FFA500"><b>★ ★ ★ ${s_name} VIP NETWORK ★ ★ ★</b></font><br>
 <font color="#FFD700"><b>╚═══════════════════════════════════╝</b></font></center><br>
 <font color="#FFD700">◆ <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
-<font color="#FFD700">◆ <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#FFA500">(${u_days})</font><br>
-<font color="#FFD700">◆ <b>Conexiones:</b></font> <font color="#FFA500"><b>${u_limit} permitido(s)</b></font><br>
-<font color="#FFD700">◆ <b>Datos Usados:</b></font> <font color="#39FF14"><b>${u_traffic}</b></font><br>
-<font color="#FFD700">◆ <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} VIP</font><br>
-<font color="#FFD700">◆ <b>Estado:</b></font> <font color="#39FF14"><b>CONECTADO / VIP ULTRA</b></font><br>
-<font color="#FFD700">◆ <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#FFD700">◆ <b>Contacto:</b></font> <font color="#00E5FF"><b>${c_info}</b></font><br>
+<font color="#FFD700">◆ <b>Vence:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#FFA500">(${u_days})</font><br>
+<font color="#FFD700">◆ <b>Límite:</b></font> <font color="#FFA500"><b>${u_limit} Dispositivo(s)</b></font><br>
+<font color="#FFD700">◆ <b>Contacto:</b></font> <a href="${link_url}"><font color="#00E5FF"><b><u>${link_text}</u></b></font></a><br>
 <font color="#FFA500">─────────────────────────────────────</font><br>
-<center><font color="#FF4444">⚠️ <b>${rules}</b></font><br>
-<font color="#FFD700"><b>★ Servicio Exclusivo de Alta Velocidad ★</b></font></center>
+<center><font color="#FF4444">⚠️ <b>${rules}</b></font></center>
 EOF
             ;;
         3)
-            # Plantilla 3: 🎮 GAMING LOW-PING PRO 🎮 (HTML Gamer Neón Verde & Aqua)
+            # Plantilla 3: 🎮 GAMING LOW-PING PRO 🎮 (HTML Gamer Neón Verde & Aqua con Hipervínculo)
             cat <<EOF
 <center><font color="#39FF14"><b>╔═══════════════════════════════════╗</b></font><br>
 <font color="#00FFCC"><b>🎮 ${s_name} GAMING LOW-PING 🎮</b></font><br>
 <font color="#39FF14"><b>╚═══════════════════════════════════╝</b></font></center><br>
 <font color="#39FF14">► <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
-<font color="#39FF14">► <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00FFCC">(${u_days})</font><br>
-<font color="#39FF14">► <b>Conexiones:</b></font> <font color="#00E5FF"><b>${u_limit} permitido(s)</b></font><br>
-<font color="#39FF14">► <b>TCP BBR:</b></font> <font color="#39FF14"><b>ACTIVO (Anti-Lag)</b></font><br>
-<font color="#39FF14">► <b>Datos Usados:</b></font> <font color="#FF00FF"><b>${u_traffic}</b></font><br>
-<font color="#39FF14">► <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} Gaming</font><br>
-<font color="#39FF14">► <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#39FF14">► <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
+<font color="#39FF14">► <b>Vence:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00FFCC">(${u_days})</font><br>
+<font color="#39FF14">► <b>Límite:</b></font> <font color="#00E5FF"><b>${u_limit} Disp.</b></font><br>
+<font color="#39FF14">► <b>Soporte:</b></font> <a href="${link_url}"><font color="#FFD700"><b><u>${link_text}</u></b></font></a><br>
 <font color="#00FFCC">─────────────────────────────────────</font><br>
-<center><font color="#FF3333">⚠️ <b>${rules}</b></font><br>
-<font color="#39FF14"><b>★ Menor Latencia & Máxima Estabilidad ★</b></font></center>
+<center><font color="#FF3333">⚠️ <b>${rules}</b></font></center>
 EOF
             ;;
         4)
-            # Plantilla 4: ⚡ CYBERPUNK HIGH SPEED ⚡ (HTML Rosa Neón & Cyan Eléctrico)
+            # Plantilla 4: ⚡ CYBERPUNK HIGH SPEED ⚡ (HTML Rosa Neón & Cyan Eléctrico con Hipervínculo)
             cat <<EOF
 <center><font color="#FF007F"><b>╔═══════════════════════════════════╗</b></font><br>
-<font color="#00F0FF"><b>⚡ ${s_name} CYBERPUNK HIGH SPEED ⚡</b></font><br>
+<font color="#00F0FF"><b>⚡ ${s_name} HIGH SPEED ⚡</b></font><br>
 <font color="#FF007F"><b>╚═══════════════════════════════════╝</b></font></center><br>
 <font color="#00F0FF">► <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
-<font color="#00F0FF">► <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00F0FF">(${u_days})</font><br>
-<font color="#00F0FF">► <b>Conexiones:</b></font> <font color="#FFFF00"><b>${u_limit} permitido(s)</b></font><br>
-<font color="#00F0FF">► <b>Datos Usados:</b></font> <font color="#FF007F"><b>${u_traffic}</b></font><br>
-<font color="#00F0FF">► <b>Host / Red:</b></font> <font color="#FFFFFF">${s_name}</font><br>
-<font color="#00F0FF">► <b>Estado:</b></font> <font color="#39FF14"><b>ONLINE 100% ESTABLE</b></font><br>
-<font color="#00F0FF">► <b>Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#00F0FF">► <b>Contacto:</b></font> <font color="#FFFF00"><b>${c_info}</b></font><br>
+<font color="#00F0FF">► <b>Vence:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00F0FF">(${u_days})</font><br>
+<font color="#00F0FF">► <b>Límite:</b></font> <font color="#FFFF00"><b>${u_limit} Disp.</b></font><br>
+<font color="#00F0FF">► <b>Contacto:</b></font> <a href="${link_url}"><font color="#FF007F"><b><u>${link_text}</u></b></font></a><br>
 <font color="#00F0FF">═════════════════════════════════════</font><br>
-<center><font color="#FF0055">⛔ <b>${rules}</b></font><br>
-<font color="#00F0FF"><b>★ Conexión Cifrada y Segura ★</b></font></center>
+<center><font color="#FF0055">⛔ <b>${rules}</b></font></center>
 EOF
             ;;
         5)
-            # Plantilla 5: 🛡️ SECURE SSH GATEWAY 🛡️ (HTML Azul Eléctrico & Blanco Minimalista)
+            # Plantilla 5: 🛡️ SECURE SSH GATEWAY 🛡️ (HTML Azul Eléctrico & Blanco con Hipervínculo)
             cat <<EOF
 <center><font color="#00BFFF"><b>╔═══════════════════════════════════╗</b></font><br>
 <font color="#FFFFFF"><b>🛡️ ${s_name} SECURE GATEWAY 🛡️</b></font><br>
 <font color="#00BFFF"><b>╚═══════════════════════════════════╝</b></font></center><br>
 <font color="#00BFFF">✔ <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
-<font color="#00BFFF">✔ <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00BFFF">(${u_days})</font><br>
-<font color="#00BFFF">✔ <b>Conexiones:</b></font> <font color="#00E5FF"><b>${u_limit} simultáneo(s)</b></font><br>
-<font color="#00BFFF">✔ <b>Tráfico Red:</b></font> <font color="#39FF14"><b>${u_traffic}</b></font><br>
-<font color="#00BFFF">✔ <b>Protocolo:</b></font> <font color="#FFFFFF">SSH / WS Direct</font><br>
-<font color="#00BFFF">✔ <b>Estado:</b></font> <font color="#39FF14"><b>ACTIVO Y PROTEGIDO</b></font><br>
-<font color="#00BFFF">✔ <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#00BFFF">✔ <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
+<font color="#00BFFF">✔ <b>Vence:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00BFFF">(${u_days})</font><br>
+<font color="#00BFFF">✔ <b>Límite:</b></font> <font color="#00E5FF"><b>${u_limit} simultáneo(s)</b></font><br>
+<font color="#00BFFF">✔ <b>Soporte:</b></font> <a href="${link_url}"><font color="#FFD700"><b><u>${link_text}</u></b></font></a><br>
 <font color="#888888">─────────────────────────────────────</font><br>
-<center><font color="#FF3366">⚠️ <b>${rules}</b></font><br>
-<font color="#00BFFF"><b>★ Privacidad y Seguridad Garantizada ★</b></font></center>
+<center><font color="#FF3366">⚠️ <b>${rules}</b></font></center>
 EOF
             ;;
         6)
-            # Plantilla 6: 📱 TEXTO PLANO MÓVIL (Sin HTML, clásico terminal)
+            # Plantilla 6: 📱 TEXTO PLANO MÓVIL (ASCII Minimalista)
             cat <<EOF
 ╔═══════════════════════════════════════╗
 ║     ★ INFORMACIÓN DE TU CUENTA ★      ║
@@ -305,11 +313,7 @@ EOF
   ● Usuario     : ${u_name}
   ● Vencimiento : ${u_exp} (${u_days})
   ● Conexiones  : ${u_limit} permitido(s)
-  ● Datos Usados: ${u_traffic}
-  ● Servidor    : ${s_name} (SSH / WS)
-  ● Estado      : ACTIVO Y OPTIMIZADO
-  ● Fecha / Hora: ${now_date}
-  ● Contacto    : ${c_info}
+  ● Contacto    : ${link_url}
 ─────────────────────────────────────────
  ⚠️  ${rules}
 ═════════════════════════════════════════
@@ -650,6 +654,8 @@ render_simulated_html() {
         -e 's|<center>||g' -e 's|</center>||g' \
         -e 's|<b>|\o033[1m|g' -e 's|</b>|\o033[0m|g' \
         -e 's|<i>|\o033[3m|g' -e 's|</i>|\o033[0m|g' \
+        -e 's|<u>|\o033[4m|g' -e 's|</u>|\o033[0m|g' \
+        -e 's|<a [^>]*>|\o033[4;36m|g' -e 's|</a>|\o033[0m|g' \
         -e 's|<font color="#00E5FF">|\o033[1;36m|g' \
         -e 's|<font color="#00F0FF">|\o033[1;36m|g' \
         -e 's|<font color="#00FFCC">|\o033[1;36m|g' \
@@ -711,7 +717,7 @@ preview_banner() {
     echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     if [[ "${BANNER_USER:-auto}" == "auto" ]]; then
         echo -e "${C_CYAN}ℹ️  Modo Dinámico Multiusuario ACTIVO:${C_RESET} Cada cliente SSH conectado verá su propio"
-        echo -e "   nombre de usuario, fecha de vencimiento y consumo de datos en su HTTP Custom."
+        echo -e "   nombre de usuario, fecha de vencimiento y enlace interactivo de soporte."
     fi
 
     press_enter
@@ -727,17 +733,17 @@ select_template() {
     echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}PLANTILLAS PARA HTTP CUSTOM${C_RESET}       ${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "  ${C_YELLOW}[1] ★ Info de Cuenta Neón Cyan (HTML Pro - Recomendado)${C_RESET}"
-    echo -e "      • Cuadro Cyan/Dorado, usuario, vencimiento, conexiones y datos."
-    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Luxury (HTML Neón Dorado & Naranja)${C_RESET}"
-    echo -e "      • Estilo exclusivo con estrellas doradas VIP y detalles de lujo."
-    echo -e "  ${C_YELLOW}[3] 🎮 Gaming & Low-Ping Pro (HTML Gamer Neón Verde & Aqua)${C_RESET}"
-    echo -e "      • Perfil optimizado con indicador TCP BBR y latencia reducida."
-    echo -e "  ${C_YELLOW}[4] ⚡ Cyberpunk High Speed (HTML Rosa Neón & Cyan Eléctrico)${C_RESET}"
-    echo -e "      • Estilo futurista de alta velocidad y conexiones cifradas."
-    echo -e "  ${C_YELLOW}[5] 🛡️ Secure SSH Gateway (HTML Azul Eléctrico & Blanco)${C_RESET}"
-    echo -e "      • Diseño corporativo minimalista, ordenado y limpio."
-    echo -e "  ${C_YELLOW}[6] 📱 Texto Plano Móvil (ASCII Clásico sin etiquetas HTML)${C_RESET}"
+    echo -e "  ${C_YELLOW}[1] ★ Info de Cuenta Neón Cyan (HTML Pro - Enlace Clickable)${C_RESET}"
+    echo -e "      • Diseño compacto Neón Cyan con enlace directo a WhatsApp/Telegram."
+    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Luxury (HTML Neón Dorado & Enlace)${C_RESET}"
+    echo -e "      • Estilo VIP de lujo con datos esenciales y botón de soporte."
+    echo -e "  ${C_YELLOW}[3] 🎮 Gaming & Low-Ping Pro (HTML Gamer Neón & Enlace)${C_RESET}"
+    echo -e "      • Perfil optimizado con acceso interactivo a contacto."
+    echo -e "  ${C_YELLOW}[4] ⚡ Cyberpunk High Speed (HTML Rosa Neón & Enlace)${C_RESET}"
+    echo -e "      • Estilo cyberpunk futurista y minimalista con hipervínculo."
+    echo -e "  ${C_YELLOW}[5] 🛡️ Secure SSH Gateway (HTML Azul Eléctrico & Enlace)${C_RESET}"
+    echo -e "      • Diseño limpio, ordenado y enlace directo a soporte."
+    echo -e "  ${C_YELLOW}[6] 📱 Texto Plano Móvil (ASCII Minimalista Clásico)${C_RESET}"
     echo -e "      • Compatible con terminales clásicas y clientes ligeros."
     echo -e "  ${C_RED}[0] Cancelar${C_RESET}\n"
 
@@ -873,7 +879,7 @@ manual_edit_banner() {
         return 1
     fi
 
-    TEMPLATE_ID="5"
+    TEMPLATE_ID="custom"
     save_banner_conf
     apply_banner_system
     echo -e "\n${C_GREEN}✔ Banner personalizado guardado y activado.${C_RESET}"
@@ -933,8 +939,9 @@ main_banner_menu() {
             2) t_label="VIP Gold (HTML)" ;;
             3) t_label="Gaming Pro (HTML)" ;;
             4) t_label="Cyberpunk (HTML)" ;;
-            5) t_label="Texto Plano" ;;
-            6) t_label="Personalizado" ;;
+            5) t_label="Secure SSH (HTML)" ;;
+            6) t_label="Texto Plano" ;;
+            *) t_label="Personalizado" ;;
         esac
 
         local u_disp="Dinámico Multiusuario (Por cuenta)"
@@ -1024,6 +1031,9 @@ case "${1:-}" in
         save_banner_conf
         apply_banner_system
         echo -e "${C_YELLOW}✔ Banner desactivado.${C_RESET}"
+        ;;
+    --source-only|--lib)
+        # Sourcing silencioso sin ejecutar el menú
         ;;
     *)
         main_banner_menu
