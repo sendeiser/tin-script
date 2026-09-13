@@ -324,23 +324,9 @@ apply_banner_system() {
         rm -rf "${CONFIG_DIR}/banners" 2>/dev/null || true
     fi
 
-    # Garantizar shell persistente para túneles SSH y compatibilidad con HTTP Custom
-    if [[ ! -f /usr/local/bin/ssh-tunnel-shell ]]; then
-        cat > /usr/local/bin/ssh-tunnel-shell <<'EOF_TSH'
-#!/bin/bash
-u="${USER:-$(id -un 2>/dev/null || true)}"
-user_banner="/etc/vps-ssh-limiter/banners/${u}.net"
-global_banner="/etc/vps-ssh-limiter/banner.net"
-if [[ -f "$user_banner" ]]; then
-    cat "$user_banner" 2>/dev/null || true
-elif [[ -f "$global_banner" ]]; then
-    cat "$global_banner" 2>/dev/null || true
-fi
-while read -r _ 2>/dev/null; do
-    :
-done
-exit 0
-EOF_TSH
+    # Garantizar shell persistente actualizada para túneles SSH y HTTP Custom
+    # Copiar siempre desde el binario instalado para asegurar banner dinámico
+    if [[ -f /usr/local/bin/ssh-tunnel-shell ]]; then
         chmod 755 /usr/local/bin/ssh-tunnel-shell
     fi
     ln -sf /usr/local/bin/ssh-tunnel-shell /bin/ssh-tunnel-shell 2>/dev/null || true
