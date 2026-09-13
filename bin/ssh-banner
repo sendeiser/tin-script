@@ -334,12 +334,42 @@ apply_banner_system() {
             sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
         fi
 
-        # Asegurar que OpenSSH no colisione con Dropbear en el puerto 143
-        sed -i '/^Port 143/d' "$sshd_cfg" 2>/dev/null || true
-        # Garantizar que OpenSSH acepte contraseñas
+        # Asegurar puertos 22 y 143 para OpenSSH con banners individuales
+        if ! grep -E -q "^Port\s+143" "$sshd_cfg"; then
+            if grep -E -q "^Port\s+22" "$sshd_cfg"; then
+                sed -i "s|^Port\s\+22.*|Port 22\nPort 143|g" "$sshd_cfg"
+            elif grep -E -q "^#Port\s+22" "$sshd_cfg"; then
+                sed -i "s|^#Port\s\+22.*|Port 22\nPort 143|g" "$sshd_cfg"
+            else
+                echo "Port 22" >> "$sshd_cfg"
+                echo "Port 143" >> "$sshd_cfg"
+            fi
+        fi
+
+        # Garantizar que OpenSSH acepte contraseñas y reenvío de puertos sin fallos
+        sed -i 's|^#\?PasswordAuthentication\s\+no|PasswordAuthentication yes|g' "$sshd_cfg" 2>/dev/null || true
         if grep -q "^#\?PasswordAuthentication" "$sshd_cfg"; then
             sed -i 's|^#\?PasswordAuthentication.*|PasswordAuthentication yes|g' "$sshd_cfg"
+        else
+            echo "PasswordAuthentication yes" >> "$sshd_cfg"
         fi
+
+        # Anular configuraciones restrictivas de proveedores cloud en /etc/ssh/sshd_config.d/
+        mkdir -p /etc/ssh/sshd_config.d
+        sed -i 's|^PasswordAuthentication\s\+no|PasswordAuthentication yes|g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
+        cat > /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf <<'EOF_SSHD'
+Port 22
+Port 143
+PasswordAuthentication yes
+KbdInteractiveAuthentication yes
+UsePAM yes
+PermitEmptyPasswords no
+AllowTcpForwarding yes
+GatewayPorts yes
+TCPKeepAlive yes
+ClientAliveInterval 60
+ClientAliveCountMax 3
+EOF_SSHD
 
         # Limpiar bloques Match User previos de vps-ssh-limiter
         if grep -q "# BEGIN VPS-SSH-LIMITER USER BANNERS" "$sshd_cfg"; then
@@ -363,7 +393,7 @@ apply_banner_system() {
         # Validar sintaxis con sshd -t antes de recargar
         if command -v sshd >/dev/null 2>&1; then
             if sshd -t 2>/dev/null; then
-                systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+                systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
             else
                 # Si falló la sintaxis, revertir bloque Match
                 sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
@@ -372,16 +402,16 @@ apply_banner_system() {
         fi
     fi
 
-    # Configurar Dropbear (puertos 143 principal, 90 y 109 secundarios)
+    # Configurar Dropbear en puertos 90 y 109 para liberar 143 a OpenSSH (para banners de usuario)
     if [[ -f /etc/default/dropbear ]]; then
-        sed -i 's|^DROPBEAR_PORT=.*|DROPBEAR_PORT=143|g' /etc/default/dropbear
+        sed -i 's|^DROPBEAR_PORT=.*|DROPBEAR_PORT=90|g' /etc/default/dropbear
         if grep -q "^#\?DROPBEAR_BANNER=" /etc/default/dropbear; then
             sed -i "s|^#\?DROPBEAR_BANNER=.*|DROPBEAR_BANNER=\"${BANNER_FILE}\"|g" /etc/default/dropbear
         else
             echo "DROPBEAR_BANNER=\"${BANNER_FILE}\"" >> /etc/default/dropbear
         fi
 
-        local cur_extra="-p 90 -p 109"
+        local cur_extra="-p 109"
         if [[ "$BANNER_ENABLED" == "true" ]]; then
             cur_extra="${cur_extra} -b ${BANNER_FILE}"
         fi

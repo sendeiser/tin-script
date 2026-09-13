@@ -158,34 +158,42 @@ if [[ -f "$DROPBEAR_DEFAULT" ]]; then
     cp "$DROPBEAR_DEFAULT" "${DROPBEAR_DEFAULT}.bak.$(date +%s)"
 fi
 
-# Escribir configuración estricta de Dropbear
+# Escribir configuración estricta de Dropbear (puertos 90 y 109 para liberar 143 a OpenSSH)
 mkdir -p /etc/dropbear /etc/vps-ssh-limiter
 cat > "$DROPBEAR_DEFAULT" <<'EOF'
 # Configuración generada automáticamente por vps-ssh-limiter
 NO_START=0
-DROPBEAR_PORT=143
-DROPBEAR_EXTRA_ARGS="-p 90 -p 109 -b /etc/vps-ssh-limiter/banner.net"
+DROPBEAR_PORT=90
+DROPBEAR_EXTRA_ARGS="-p 109 -b /etc/vps-ssh-limiter/banner.net"
 DROPBEAR_BANNER="/etc/vps-ssh-limiter/banner.net"
 DROPBEAR_RECEIVE_WINDOW=65536
 EOF
 
-# Habilitar y reiniciar Dropbear (desactivar dropbear.socket para permitir puertos 143, 90, 109)
+# Habilitar y reiniciar Dropbear
 log_info "Reiniciando Dropbear para aplicar nuevos puertos..."
 systemctl stop dropbear.socket 2>/dev/null || true
 systemctl disable dropbear.socket 2>/dev/null || true
 systemctl enable dropbear 2>/dev/null || true
 systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
 
-log_success "Dropbear configurado y activo en puertos 143, 90 y 109."
+log_success "Dropbear configurado y activo en puertos 90 y 109."
 
-# Configurar OpenSSH: garantizar autenticación por contraseña y evitar colisión en puerto 143
-log_info "Garantizando soporte de autenticación con contraseña en OpenSSH..."
+# Configurar OpenSSH en puertos 22 y 143 con soporte total de contraseñas y banners individuales
+log_info "Configurando OpenSSH en puertos 22 y 143 con soporte de banners dinámicos..."
 SSHD_CFG="/etc/ssh/sshd_config"
 if [[ -f "$SSHD_CFG" ]]; then
-    # Eliminar puerto 143 si fue añadido a sshd_config para evitar conflicto de sockets con Dropbear
-    sed -i '/^Port 143/d' "$SSHD_CFG" 2>/dev/null || true
+    if ! grep -E -q "^Port\s+143" "$SSHD_CFG"; then
+        if grep -E -q "^Port\s+22" "$SSHD_CFG"; then
+            sed -i "s|^Port\s\+22.*|Port 22\nPort 143|g" "$SSHD_CFG"
+        elif grep -E -q "^#Port\s+22" "$SSHD_CFG"; then
+            sed -i "s|^#Port\s\+22.*|Port 22\nPort 143|g" "$SSHD_CFG"
+        else
+            echo "Port 22" >> "$SSHD_CFG"
+            echo "Port 143" >> "$SSHD_CFG"
+        fi
+    fi
 
-    # Asegurar PasswordAuthentication en sshd_config
+    sed -i 's|^#\?PasswordAuthentication\s\+no|PasswordAuthentication yes|g' "$SSHD_CFG" 2>/dev/null || true
     if grep -q "^#\?PasswordAuthentication" "$SSHD_CFG"; then
         sed -i 's|^#\?PasswordAuthentication.*|PasswordAuthentication yes|g' "$SSHD_CFG"
     else
@@ -195,10 +203,13 @@ fi
 
 # Anular directivas restrictivas de proveedores de nube (como 50-cloud-init.conf)
 mkdir -p /etc/ssh/sshd_config.d
+sed -i 's|^PasswordAuthentication\s\+no|PasswordAuthentication yes|g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
 cat > /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf <<'EOF'
 Port 22
+Port 143
 PasswordAuthentication yes
 KbdInteractiveAuthentication yes
+UsePAM yes
 PermitEmptyPasswords no
 AllowTcpForwarding yes
 GatewayPorts yes
@@ -209,7 +220,7 @@ EOF
 
 if command -v sshd >/dev/null 2>&1; then
     if sshd -t 2>/dev/null; then
-        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
     fi
 fi
 
