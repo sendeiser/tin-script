@@ -111,7 +111,11 @@ show_httpcustom_card() {
     echo -e "    1. Abre HTTP Custom y activa las casillas ${C_BOLD}'Payload'${C_RESET} y ${C_BOLD}'Auto Ping'${C_RESET}."
     echo -e "    2. En el recuadro superior pega el ${C_BOLD}Payload${C_RESET} de arriba."
     echo -e "    3. En el campo Server pon: ${C_CYAN}${target_dom}:80@${sample_user}:${sample_pass}${C_RESET}"
-    echo -e "    4. Pulsa ${C_GREEN}${C_BOLD}[CONNECT]${C_RESET}. ¡Conexión 100% gratuita establecida!"
+    if [[ "$mode" == "cloudflare" ]]; then
+        echo -e "    ${C_YELLOW}💡 TIP SIN SALDO / 0 CRÉDITO:${C_RESET} Si tu celular no tiene saldo, en el campo Server pon:"
+        echo -e "       ${C_GREEN}woocommerce.everlytic.net:80@${sample_user}:${sample_pass}${C_RESET} (o ${C_GREEN}104.16.51.111:80@...${C_RESET})"
+    fi
+    echo -e "    4. Pulsa ${C_GREEN}${C_BOLD}[CONNECT]${C_RESET}. ¡Conexión establecida exitosamente!"
     echo -e "${C_GREEN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
 }
 
