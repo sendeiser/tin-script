@@ -53,29 +53,31 @@ sudo menu
 
 ### Vista Previa del Dashboard:
 ```text
-╔══════════════════════════════════════════════════════════════════════════════╗
-║        VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ║
-╚══════════════════════════════════════════════════════════════════════════════╝
- S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.martinvps.online  IP: 198.51.100.24
- Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
- RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.8.3 - ACTUALIZADO]
-──────────────────────────────────────────────────────────────────────────────
- SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
- CUENTAS:    Total: 12  |  Online: 5  |  Expiradas: 1  |  Tráfico VPS: 4.82 GB
-══════════════════════════════════════════════════════════════════════════════
- [1] ► GESTIÓN DE USUARIOS    (Crear, Renovar, Modificar, Bloquear, Eliminar)
- [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Tráfico de datos y conexiones)
- [3] ► BANNERS Y BIENVENIDA   (Mensajes en apps, plantillas, días y límites)
- [4] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
- [5] ► PROTOCOLOS Y PUERTOS   (Dropbear, WebSocket Proxy 80, Reiniciar SSH)
- [6] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
- [7] ► DOMINIOS Y HOSTS 100% GRATIS (Asistente Guiado, Cloudflare, DuckDNS)
- [8] ► GUÍA & ASISTENTE HTTP CUSTOM (Asistente CDN, Payloads, Fronting)
- [9] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
- [10] ► DESINSTALAR SCRIPT    (Eliminar servicios y binarios del VPS)
- [0] ► SALIR
-══════════════════════════════════════════════════════════════════════════════
+╔═══════════════════════════════════════╗
+║     ★ VPS-SSH-LIMITER MANAGER ★       ║
+╚═══════════════════════════════════════╝
+ S.O.   : Ubuntu 22.04 (x86_64)
+ Host/IP: vps1.martinvps.online
+ Uptime : 14d 6h | Disco: 24%
+ RAM    : [██░░░] 480M/2G | CPU: 1.2%
+ Versión: [v1.8.4 - ACTUALIZADO]
+─────────────────────────────────────────
+ SERVICIOS: SSH:✔ Drop:✔ WS:✔ Lim:✔
+ CUENTAS  : Tot:12 | On:5 | Exp:1
+ TRÁFICO  : 4.82 GB Transferidos
+─────────────────────────────────────────
+ [1]  ► GESTIÓN DE USUARIOS
+ [2]  ► MONITOR DE CONEXIONES Y DATOS
+ [3]  ► BANNERS Y BIENVENIDA
+ [4]  ► DEMONIO LIMITADOR (SYSTEMD)
+ [5]  ► PROTOCOLOS Y PUERTOS
+ [6]  ► OPTIMIZACIÓN Y SISTEMA
+ [7]  ► DOMINIOS Y HOSTS 100% GRATIS
+ [8]  ► GUÍA & ASISTENTE HTTP CUSTOM
+ [9]  ► ACTUALIZAR SCRIPT
+ [10] ► DESINSTALAR SCRIPT
+ [0]  ► SALIR DEL PANEL
+═════════════════════════════════════════
 ```
 
 ---

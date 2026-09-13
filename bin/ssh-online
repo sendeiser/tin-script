@@ -2,12 +2,13 @@
 # ==============================================================================
 # vps-ssh-limiter: bin/ssh-online
 # Monitor CLI de conexiones concurrentes para SSH y Dropbear.
-# Muestra una tabla formateada con estado en tiempo real, límites y expiración.
+# Optimizado para pantallas móviles (41 columnas) con soporte para tabla extendida y JSON.
 # ==============================================================================
 set -euo pipefail
 
 USE_COLOR=true
 JSON_OUTPUT=false
+WIDE_TABLE=false
 
 if [[ ! -t 1 ]]; then
     USE_COLOR=false
@@ -17,11 +18,13 @@ for arg in "$@"; do
     case "$arg" in
         --no-color) USE_COLOR=false ;;
         --json) JSON_OUTPUT=true ;;
+        --wide|--table|-w) WIDE_TABLE=true ;;
         -h|--help)
             cat <<EOF
 Uso: ssh-online [OPCIONES]
 
 Opciones:
+    --wide, -w    Muestra la tabla horizontal ancha (para terminales de PC).
     --no-color    Desactiva el resaltado de color en la terminal.
     --json        Genera la salida en formato JSON estructurado.
     -h, --help    Muestra esta ayuda.
@@ -54,6 +57,7 @@ else
     C_BOLD=""
     C_GRAY=""
 fi
+
 # ------------------------------------------------------------------------------
 # Funciones de Medición y Formateo de Tráfico / Datos
 # ------------------------------------------------------------------------------
@@ -123,7 +127,6 @@ count_user_connections() {
     local ssh_pids=""
     local dropbear_pids=""
 
-    # Dual inspection: OpenSSH y Dropbear bajo el UID del usuario
     ssh_pids=$(pgrep -u "$user" -f "^sshd: $user@" 2>/dev/null || true)
     dropbear_pids=$(pgrep -u "$user" -x "dropbear" 2>/dev/null || true)
 
@@ -142,36 +145,39 @@ count_user_connections() {
 }
 
 # ------------------------------------------------------------------------------
-# Función para verificar expiración
+# Función para verificar expiración y calcular días restantes
 # ------------------------------------------------------------------------------
 check_user_expiration() {
     local user="$1"
     local expiry_raw=""
     local is_expired="NO"
     local expiry_formatted="Sin exp."
+    local days_left="Ilimitado"
 
-    # Intentar obtener información de chage
     if command -v chage >/dev/null 2>&1; then
         expiry_raw=$(chage -l "$user" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
         if [[ -n "$expiry_raw" && "$expiry_raw" != "never" && "$expiry_raw" != "nunca" ]]; then
-            local expiry_epoch
+            local expiry_epoch now_epoch
             expiry_epoch=$(date -d "$expiry_raw" +%s 2>/dev/null || true)
+            now_epoch=$(date +%s)
             if [[ -n "$expiry_epoch" ]]; then
                 expiry_formatted=$(date -d "@$expiry_epoch" +%Y-%m-%d 2>/dev/null || echo "$expiry_raw")
-                local now_epoch
-                now_epoch=$(date +%s)
-                if [[ "$now_epoch" -gt "$expiry_epoch" ]]; then
+                local diff=$(( (expiry_epoch - now_epoch) / 86400 ))
+                if [[ $diff -ge 0 ]]; then
+                    days_left="${diff} d rest."
+                else
+                    days_left="EXPIRADO"
                     is_expired="SI"
                 fi
             fi
         fi
     fi
 
-    echo "${expiry_formatted}|${is_expired}"
+    echo "${expiry_formatted}|${is_expired}|${days_left}"
 }
 
 # ------------------------------------------------------------------------------
-# Recolección de usuarios gestionados (GECOS contiene LIM:<N>)
+# Detección Universal de Usuarios Túnel en el Sistema
 # ------------------------------------------------------------------------------
 PASSWD_FILE="${PASSWD_FILE:-/etc/passwd}"
 if [[ ! -r "$PASSWD_FILE" ]]; then
@@ -181,15 +187,32 @@ fi
 
 declare -a USERS_LIST=()
 while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^([a-zA-Z0-9_-]+):.*:LIM[:_=-]?([0-9]+) ]]; then
-        username="${BASH_REMATCH[1]}"
-        limit="${BASH_REMATCH[2]}"
-        USERS_LIST+=("$username:$limit")
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    u="${line%%:*}"
+    [[ -z "$u" ]] && continue
+    rest="${line#*:}"
+    rest="${rest#*:}"
+    uid="${rest%%:*}"
+
+    limit=""
+    if [[ "$line" =~ LIM[:_=-]?([0-9]+) ]]; then
+        limit="${BASH_REMATCH[1]}"
+    elif [[ "$uid" =~ ^[0-9]+$ && "$uid" -ge 1000 && "$uid" -lt 65534 ]]; then
+        if [[ "$u" != "nobody" && "$u" != "nogroup" && "$u" != "ubuntu" && "$u" != "debian" ]]; then
+            limit="1"
+        fi
+    fi
+
+    if [[ -n "$limit" ]]; then
+        USERS_LIST+=("$u:$limit")
     fi
 done < "$PASSWD_FILE"
 
 TOTAL_MANAGED=${#USERS_LIST[@]}
 
+# ------------------------------------------------------------------------------
+# Salida en Formato JSON
+# ------------------------------------------------------------------------------
 if [[ "$JSON_OUTPUT" == true ]]; then
     json_entries=()
     for entry in "${USERS_LIST[@]}"; do
@@ -197,7 +220,7 @@ if [[ "$JSON_OUTPUT" == true ]]; then
         limit="${entry##*:}"
 
         read -r ssh_count dropbear_count < <(count_user_connections "$user")
-        IFS='|' read -r exp_date is_exp < <(check_user_expiration "$user")
+        IFS='|' read -r exp_date is_exp days_left < <(check_user_expiration "$user")
         total_conn=$((ssh_count + dropbear_count))
         u_traffic=$(get_user_traffic_bytes "$user")
         u_traffic_fmt=$(format_bytes "$u_traffic")
@@ -213,7 +236,7 @@ if [[ "$JSON_OUTPUT" == true ]]; then
             status="ACTIVO"
         fi
 
-        json_entries+=("{\"username\":\"$user\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"traffic_bytes\":$u_traffic,\"traffic_formatted\":\"$u_traffic_fmt\",\"expiration\":\"$exp_date\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
+        json_entries+=("{\"username\":\"$user\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"traffic_bytes\":$u_traffic,\"traffic_formatted\":\"$u_traffic_fmt\",\"expiration\":\"$exp_date\",\"days_left\":\"$days_left\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
     done
     
     joined=$(IFS=,; echo "${json_entries[*]}")
@@ -224,82 +247,158 @@ if [[ "$JSON_OUTPUT" == true ]]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Encabezado visual de la tabla
+# Modo Tabla Ancha (--wide para PC / Terminales grandes)
 # ------------------------------------------------------------------------------
-echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}    VPS-SSH-LIMITER :: MONITOR DE CONEXIONES Y CONSUMO DE DATOS     ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
-echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
+if [[ "$WIDE_TABLE" == true ]]; then
+    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}    VPS-SSH-LIMITER :: MONITOR DE CONEXIONES Y CONSUMO DE DATOS     ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
 
-if [[ $TOTAL_MANAGED -eq 0 ]]; then
-    echo -e "${C_YELLOW}⚠ No se encontraron usuarios túnel configurados en el sistema.${C_RESET}"
-    echo -e "Cree usuarios con: ${C_BOLD}${C_GREEN}ssh-useradd <usuario> <contraseña> <días> <límite>${C_RESET}\n"
+    if [[ $TOTAL_MANAGED -eq 0 ]]; then
+        echo -e "${C_YELLOW}⚠ No se encontraron usuarios túnel configurados en el sistema.${C_RESET}"
+        echo -e "Cree usuarios con: ${C_BOLD}${C_GREEN}ssh-useradd <usuario> <contraseña> <días> <límite>${C_RESET}\n"
+        exit 0
+    fi
+
+    printf " ${C_BOLD}%-16s %-5s %-9s %-6s %-7s %-12s %-12s %-20s${C_RESET}\n" \
+        "USUARIO" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "DATOS USADOS" "EXPIRACIÓN" "ESTADO"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
+
+    ONLINE_USERS=0
+    TOTAL_ALL_CONN=0
+
+    for entry in "${USERS_LIST[@]}"; do
+        user="${entry%%:*}"
+        limit="${entry##*:}"
+
+        read -r ssh_count dropbear_count < <(count_user_connections "$user")
+        IFS='|' read -r exp_date is_exp days_left < <(check_user_expiration "$user")
+        total_conn=$((ssh_count + dropbear_count))
+        u_bytes=$(get_user_traffic_bytes "$user")
+        u_traffic_str=$(format_bytes "$u_bytes")
+
+        TOTAL_ALL_CONN=$((TOTAL_ALL_CONN + total_conn))
+        if [[ "$total_conn" -gt 0 ]]; then
+            ONLINE_USERS=$((ONLINE_USERS + 1))
+        fi
+
+        user_color="${C_WHITE}"
+        quota_str="${total_conn}/${limit}"
+        if [[ "$is_exp" == "SI" ]]; then
+            status_label="${C_RED}⏰ EXPIRADO${C_RESET}"
+            user_color="${C_RED}"
+        elif [[ "$total_conn" -gt "$limit" ]]; then
+            status_label="${C_RED}${C_BOLD}🚫 EXCEDIDO (${total_conn}/${limit})${C_RESET}"
+            user_color="${C_RED}"
+        elif [[ "$total_conn" -eq "$limit" && "$total_conn" -gt 0 ]]; then
+            status_label="${C_YELLOW}⚠️  AL LÍMITE (${total_conn}/${limit})${C_RESET}"
+            user_color="${C_YELLOW}"
+        elif [[ "$total_conn" -gt 0 ]]; then
+            status_label="${C_GREEN}● ONLINE (${total_conn}/${limit})${C_RESET}"
+            user_color="${C_GREEN}"
+        else
+            status_label="${C_GRAY}○ Desconectado${C_RESET}"
+            user_color="${C_WHITE}"
+        fi
+
+        printf " ${user_color}%-16s${C_RESET} %-5d %-9d %-6d %-7s %-12s %-12s %b\n" \
+            "$user" "$ssh_count" "$dropbear_count" "$total_conn" "$quota_str" "$u_traffic_str" "$exp_date" "$status_label"
+    done
+
+    srv_total_bytes=$(get_server_total_traffic_bytes)
+    srv_total_str=$(format_bytes "$srv_total_bytes")
+
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    printf " ${C_BOLD}%-13s${C_RESET} ${C_CYAN}%d${C_RESET} | ${C_BOLD}Online:${C_RESET} ${C_GREEN}%d${C_RESET} | ${C_BOLD}Conexiones:${C_RESET} ${C_YELLOW}%d${C_RESET} | ${C_BOLD}Tráfico Total Servidor:${C_RESET} ${C_BOLD}${C_GREEN}%s${C_RESET}\n" \
+        "Registrados:" "$TOTAL_MANAGED" "$ONLINE_USERS" "$TOTAL_ALL_CONN" "$srv_total_str"
+    echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
     exit 0
 fi
 
-printf " ${C_BOLD}%-16s %-5s %-9s %-6s %-7s %-12s %-12s %-20s${C_RESET}\n" \
-    "USUARIO" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "DATOS USADOS" "EXPIRACIÓN" "ESTADO"
-echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
+# ------------------------------------------------------------------------------
+# Modo Móvil por Defecto (Tarjetas 41 columnas - 100% Celular)
+# ------------------------------------------------------------------------------
+srv_total_bytes=$(get_server_total_traffic_bytes)
+srv_total_str=$(format_bytes "$srv_total_bytes")
+
+echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}   ${C_BOLD}${C_WHITE}★ MONITOR DE CONEXIONES Y DATOS ★${C_RESET}   ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}               ${C_GRAY}($(date '+%H:%M:%S'))${C_RESET}              ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+
+if [[ $TOTAL_MANAGED -eq 0 ]]; then
+    echo -e " ${C_YELLOW}⚠ No hay usuarios túnel en el sistema.${C_RESET}"
+    echo -e " Cree uno con: ${C_GREEN}ssh-useradd <usuario>${C_RESET}"
+    echo -e "${C_CYAN}═════════════════════════════════════════${C_RESET}\n"
+    exit 0
+fi
 
 ONLINE_USERS=0
-TOTAL_SSH_CONN=0
-TOTAL_DROPBEAR_CONN=0
 TOTAL_ALL_CONN=0
+TOTAL_LIMIT_CAP=0
+idx=0
+
+# Primero calculamos estadísticas globales
+for entry in "${USERS_LIST[@]}"; do
+    u="${entry%%:*}"
+    lim="${entry##*:}"
+    TOTAL_LIMIT_CAP=$((TOTAL_LIMIT_CAP + lim))
+    read -r s_cnt d_cnt < <(count_user_connections "$u")
+    tot_c=$((s_cnt + d_cnt))
+    TOTAL_ALL_CONN=$((TOTAL_ALL_CONN + tot_c))
+    if [[ "$tot_c" -gt 0 ]]; then
+        ONLINE_USERS=$((ONLINE_USERS + 1))
+    fi
+done
+
+echo -e " ${C_BOLD}Total:${C_RESET} ${C_CYAN}${TOTAL_MANAGED}${C_RESET} | ${C_BOLD}Online:${C_RESET} ${C_GREEN}${ONLINE_USERS}${C_RESET} | ${C_BOLD}Tráfico:${C_RESET} ${C_GREEN}${srv_total_str}${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
 for entry in "${USERS_LIST[@]}"; do
+    idx=$((idx + 1))
     user="${entry%%:*}"
     limit="${entry##*:}"
 
     read -r ssh_count dropbear_count < <(count_user_connections "$user")
-    IFS='|' read -r exp_date is_exp < <(check_user_expiration "$user")
+    IFS='|' read -r exp_date is_exp days_left < <(check_user_expiration "$user")
     total_conn=$((ssh_count + dropbear_count))
     u_bytes=$(get_user_traffic_bytes "$user")
     u_traffic_str=$(format_bytes "$u_bytes")
 
-    TOTAL_SSH_CONN=$((TOTAL_SSH_CONN + ssh_count))
-    TOTAL_DROPBEAR_CONN=$((TOTAL_DROPBEAR_CONN + dropbear_count))
-    TOTAL_ALL_CONN=$((TOTAL_ALL_CONN + total_conn))
-
-    if [[ "$total_conn" -gt 0 ]]; then
-        ONLINE_USERS=$((ONLINE_USERS + 1))
-    fi
-
-    # Determinar estado, icono y color
-    user_color="${C_WHITE}"
-    quota_str="${total_conn}/${limit}"
+    # Formatear estado para móvil
     if [[ "$is_exp" == "SI" ]]; then
-        status_label="${C_RED}⏰ EXPIRADO${C_RESET}"
-        user_color="${C_RED}"
+        badge="${C_RED}⏰ EXPIRADO${C_RESET}"
+        bullet="${C_RED}●${C_RESET}"
     elif [[ "$total_conn" -gt "$limit" ]]; then
-        status_label="${C_RED}${C_BOLD}🚫 EXCEDIDO (${total_conn}/${limit})${C_RESET}"
-        user_color="${C_RED}"
+        badge="${C_RED}${C_BOLD}🚫 EXCEDIDO (${total_conn}/${limit})${C_RESET}"
+        bullet="${C_RED}●${C_RESET}"
     elif [[ "$total_conn" -eq "$limit" && "$total_conn" -gt 0 ]]; then
-        status_label="${C_YELLOW}⚠️  AL LÍMITE (${total_conn}/${limit})${C_RESET}"
-        user_color="${C_YELLOW}"
+        badge="${C_YELLOW}⚠️ AL LÍMITE (${total_conn}/${limit})${C_RESET}"
+        bullet="${C_YELLOW}●${C_RESET}"
     elif [[ "$total_conn" -gt 0 ]]; then
-        status_label="${C_GREEN}● ONLINE (${total_conn}/${limit})${C_RESET}"
-        user_color="${C_GREEN}"
+        badge="${C_GREEN}● ONLINE (${total_conn}/${limit})${C_RESET}"
+        bullet="${C_GREEN}●${C_RESET}"
     else
-        status_label="${C_GRAY}○ Desconectado${C_RESET}"
-        user_color="${C_WHITE}"
+        badge="${C_GRAY}○ OFFLINE (0/${limit})${C_RESET}"
+        bullet="${C_WHITE}○${C_RESET}"
     fi
 
-    printf " ${user_color}%-16s${C_RESET} %-5d %-9d %-6d %-7s %-12s %-12s %b\n" \
-        "$user" \
-        "$ssh_count" \
-        "$dropbear_count" \
-        "$total_conn" \
-        "$quota_str" \
-        "$u_traffic_str" \
-        "$exp_date" \
-        "$status_label"
+    echo -e " ${C_BOLD}[${idx}]${C_RESET} ${bullet} ${C_BOLD}${C_WHITE}${user}${C_RESET} : ${badge}"
+    echo -e "     • Datos : ${C_MAGENTA}${u_traffic_str}${C_RESET} usados"
+    echo -e "     • Vence : ${C_CYAN}${exp_date}${C_RESET} (${days_left})"
+    if [[ "$total_conn" -gt 0 ]]; then
+        echo -e "     • Túnel : ${C_YELLOW}SSH: ${ssh_count}${C_RESET} | ${C_YELLOW}Dropbear: ${dropbear_count}${C_RESET}"
+    else
+        echo -e "     • Túnel : ${C_GRAY}Sin conexiones activas${C_RESET}"
+    fi
+
+    if [[ $idx -lt $TOTAL_MANAGED ]]; then
+        echo -e "${C_GRAY}  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·${C_RESET}"
+    fi
 done
 
-srv_total_bytes=$(get_server_total_traffic_bytes)
-srv_total_str=$(format_bytes "$srv_total_bytes")
-
-echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
-printf " ${C_BOLD}%-13s${C_RESET} ${C_CYAN}%d${C_RESET} | ${C_BOLD}Online:${C_RESET} ${C_GREEN}%d${C_RESET} | ${C_BOLD}Conexiones:${C_RESET} ${C_YELLOW}%d${C_RESET} | ${C_BOLD}Tráfico Total Servidor:${C_RESET} ${C_BOLD}${C_GREEN}%s${C_RESET}\n" \
-    "Registrados:" "$TOTAL_MANAGED" "$ONLINE_USERS" "$TOTAL_ALL_CONN" "$srv_total_str"
-echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+echo -e " Conexiones activas: ${C_YELLOW}${TOTAL_ALL_CONN}${C_RESET} de ${C_BOLD}${TOTAL_LIMIT_CAP}${C_RESET} permitidas"
+echo -e "${C_CYAN}═════════════════════════════════════════${C_RESET}\n"
 
 exit 0

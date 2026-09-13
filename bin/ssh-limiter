@@ -153,14 +153,29 @@ while $RUNNING; do
         continue
     fi
 
-    # Leer usuarios administrados con cuota LIM:<N> en GECOS
+    # Leer usuarios administrados con cuota LIM:<N> o UID >= 1000
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Salir inmediatamente si se recibió señal de apagado durante la lectura
         if ! $RUNNING; then break; fi
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
 
-        if [[ "$line" =~ ^([a-zA-Z0-9_-]+):.*:LIM[:_=-]?([0-9]+) ]]; then
-            username="${BASH_REMATCH[1]}"
-            limit="${BASH_REMATCH[2]}"
+        u="${line%%:*}"
+        [[ -z "$u" ]] && continue
+        rest="${line#*:}"
+        rest="${rest#*:}"
+        uid="${rest%%:*}"
+
+        limit=""
+        if [[ "$line" =~ LIM[:_=-]?([0-9]+) ]]; then
+            limit="${BASH_REMATCH[1]}"
+        elif [[ "$uid" =~ ^[0-9]+$ && "$uid" -ge 1000 && "$uid" -lt 65534 ]]; then
+            if [[ "$u" != "nobody" && "$u" != "nogroup" && "$u" != "ubuntu" && "$u" != "debian" ]]; then
+                limit="1"
+            fi
+        fi
+
+        if [[ -n "$limit" ]]; then
+            username="$u"
 
             # Inspección directa sin tuberías complejas:
             # 1. OpenSSH bajo el UID del usuario (procesos de sesión autenticada)

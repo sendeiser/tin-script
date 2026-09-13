@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # vps-ssh-limiter: bin/menu
-# Panel de Control Interactivo y Suite de Administración para Servidores VPS.
-# Inspirado en las interfaces de referencia (Darnyx Script, ChumoGH, VPS-MX).
+# Panel de Control Interactivo con Estética Hacker / SysAdmin Moderna.
+# Rediseñado 100% para pantallas móviles (41 columnas exactas).
+# Atajos globales: menu, tin, vps
 # ==============================================================================
-set -u
+set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# Configuración Visual y Paleta de Colores ANSI
+# Configuración de Colores ANSI
 # ------------------------------------------------------------------------------
 if [[ -t 1 ]]; then
     C_RESET="\033[0m"
@@ -20,7 +21,6 @@ if [[ -t 1 ]]; then
     C_WHITE="\033[1;37m"
     C_BOLD="\033[1m"
     C_GRAY="\033[0;90m"
-    C_BG_BLUE="\033[44;37m"
 else
     C_RESET=""
     C_RED=""
@@ -32,21 +32,23 @@ else
     C_WHITE=""
     C_BOLD=""
     C_GRAY=""
-    C_BG_BLUE=""
 fi
 
-# ------------------------------------------------------------------------------
-# Manejo de Salida Limpia
-# ------------------------------------------------------------------------------
-trap_exit() {
-    echo -e "\n${C_RESET}"
-    exit 0
-}
-trap trap_exit SIGINT SIGTERM
-
 press_enter() {
-    echo -e "\n${C_GRAY}Presione ${C_BOLD}[Enter]${C_RESET}${C_GRAY} para regresar al menú...${C_RESET}"
-    read -r _
+    echo ""
+    read -r -p " Presione [Enter] para continuar..." _ || true
+}
+
+run_bin() {
+    local bin_name="$1"
+    shift
+    if [[ -x "/usr/local/bin/${bin_name}" ]]; then
+        "/usr/local/bin/${bin_name}" "$@"
+    elif [[ -f "${BASH_SOURCE[0]%/*}/${bin_name}" ]]; then
+        bash "${BASH_SOURCE[0]%/*}/${bin_name}" "$@"
+    else
+        "$bin_name" "$@"
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -54,20 +56,21 @@ press_enter() {
 # ------------------------------------------------------------------------------
 get_public_ip() {
     local ip
-    ip=$(curl -s4 -m 1.5 https://api.ipify.org 2>/dev/null || curl -s4 -m 1.5 https://icanhazip.com 2>/dev/null || ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n1 || echo "No disponible")
+    ip=$(curl -s4 -m 1.5 https://api.ipify.org 2>/dev/null || \
+         curl -s4 -m 1.5 https://icanhazip.com 2>/dev/null || \
+         ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n1 || \
+         hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
     echo "$ip"
 }
 
 get_ram_info() {
+    local mem_data total_m used_m
     if command -v free >/dev/null 2>&1; then
-        local mem_data
         mem_data=$(free -m | awk '/Mem:/ {print $2, $3}')
-        local total_m used_m pct
         total_m=$(echo "$mem_data" | awk '{print $1}')
         used_m=$(echo "$mem_data" | awk '{print $2}')
         if [[ -n "$total_m" && "$total_m" -gt 0 ]]; then
-            pct=$(( used_m * 100 / total_m ))
-            echo "${used_m}MB / ${total_m}MB (${pct}%)"
+            echo "${used_m}M/${total_m}M"
             return
         fi
     fi
@@ -75,16 +78,16 @@ get_ram_info() {
 }
 
 get_ram_bar() {
+    local mem_data total_m used_m pct filled empty
     if command -v free >/dev/null 2>&1; then
-        local mem_data total_m used_m pct filled empty
         mem_data=$(free -m | awk '/Mem:/ {print $2, $3}')
         total_m=$(echo "$mem_data" | awk '{print $1}')
         used_m=$(echo "$mem_data" | awk '{print $2}')
         if [[ -n "$total_m" && "$total_m" -gt 0 ]]; then
             pct=$(( used_m * 100 / total_m ))
-            filled=$(( pct / 10 ))
-            if [[ $filled -gt 10 ]]; then filled=10; fi
-            empty=$(( 10 - filled ))
+            filled=$(( pct / 20 ))
+            if [[ $filled -gt 5 ]]; then filled=5; fi
+            empty=$(( 5 - filled ))
             local bar="["
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=0; i<empty; i++)); do bar+="░"; done
@@ -93,7 +96,7 @@ get_ram_bar() {
             return
         fi
     fi
-    echo "[░░░░░░░░░░]"
+    echo "[░░░░░]"
 }
 
 get_cpu_usage() {
@@ -111,7 +114,7 @@ get_cpu_usage() {
 get_disk_usage() {
     if command -v df >/dev/null 2>&1; then
         local d
-        d=$(df -h / 2>/dev/null | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+        d=$(df -h / 2>/dev/null | awk 'NR==2 {print $5}')
         if [[ -n "$d" ]]; then
             echo "$d"
             return
@@ -128,7 +131,7 @@ get_uptime_formatted() {
         hours=$(( (up_sec % 86400) / 3600 ))
         mins=$(( (up_sec % 3600) / 60 ))
         if [[ $days -gt 0 ]]; then
-            echo "${days}d ${hours}h ${mins}m"
+            echo "${days}d ${hours}h"
         else
             echo "${hours}h ${mins}m"
         fi
@@ -140,9 +143,9 @@ get_uptime_formatted() {
 check_service_badge() {
     local sname="$1"
     if systemctl is-active --quiet "$sname" 2>/dev/null; then
-        echo -e "${C_GREEN}[ONLINE]${C_RESET}"
+        echo -e "${C_GREEN}✔${C_RESET}"
     else
-        echo -e "${C_RED}[OFFLINE]${C_RESET}"
+        echo -e "${C_RED}✖${C_RESET}"
     fi
 }
 
@@ -154,11 +157,24 @@ get_user_stats() {
 
     if [[ -r "$pass_file" ]]; then
         while IFS= read -r line || [[ -n "$line" ]]; do
-            if [[ "$line" =~ ^([a-zA-Z0-9_-]+):.*:LIM[:_=-]?([0-9]+) ]]; then
-                local u="${BASH_REMATCH[1]}"
-                total=$((total + 1))
+            [[ -z "$line" || "$line" =~ ^# ]] && continue
+            local u="${line%%:*}"
+            [[ -z "$u" ]] && continue
+            local rest="${line#*:}"
+            rest="${rest#*:}"
+            local uid="${rest%%:*}"
 
-                # Conexiones
+            local is_user=false
+            if [[ "$line" =~ LIM[:_=-]?([0-9]+) ]]; then
+                is_user=true
+            elif [[ "$uid" =~ ^[0-9]+$ && "$uid" -ge 1000 && "$uid" -lt 65534 ]]; then
+                if [[ "$u" != "nobody" && "$u" != "nogroup" && "$u" != "ubuntu" && "$u" != "debian" ]]; then
+                    is_user=true
+                fi
+            fi
+
+            if [[ "$is_user" == true ]]; then
+                total=$((total + 1))
                 local spids dpids
                 spids=$(pgrep -u "$u" -f "^sshd: $u@" 2>/dev/null || true)
                 dpids=$(pgrep -u "$u" -x "dropbear" 2>/dev/null || true)
@@ -166,7 +182,6 @@ get_user_stats() {
                     online=$((online + 1))
                 fi
 
-                # Expiración
                 if command -v chage >/dev/null 2>&1; then
                     local exp_raw
                     exp_raw=$(chage -l "$u" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
@@ -186,7 +201,7 @@ get_user_stats() {
 }
 
 # ------------------------------------------------------------------------------
-# Renderizado del Dashboard Principal
+# Renderizado del Dashboard Principal (41 Columnas - Mobile First)
 # ------------------------------------------------------------------------------
 draw_dashboard() {
     clear
@@ -209,10 +224,10 @@ draw_dashboard() {
 
     local os_pretty="Linux"
     if [[ -f /etc/os-release ]]; then
-        os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
+        os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"' | cut -d' ' -f1-2)
     fi
 
-    local current_ver="1.8.3"
+    local current_ver="1.8.4"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -225,11 +240,9 @@ draw_dashboard() {
         active_dom=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/domain)
     fi
 
-    local host_line
+    local host_disp="$pub_ip"
     if [[ -n "$active_dom" ]]; then
-        host_line="${C_BOLD}Host:${C_RESET} ${C_GREEN}${active_dom}${C_RESET}  ${C_BOLD}IP:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
-    else
-        host_line="${C_BOLD}IP Pública:${C_RESET} ${C_YELLOW}${pub_ip}${C_RESET}"
+        host_disp="$active_dom"
     fi
 
     local srv_total_b=0 srv_total_fmt="0 B"
@@ -252,36 +265,38 @@ draw_dashboard() {
     fi
 
     local ver_badge="${C_GREEN}[v${current_ver} - ACTUALIZADO]${C_RESET}"
-    local opt_9_txt="${C_BOLD}${C_YELLOW}[9]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
+    local opt_9_txt="${C_YELLOW}${C_BOLD}[9]${C_RESET}  ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}"
 
     if [[ "$remote_ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$remote_ver" != "$current_ver" ]]; then
-        ver_badge="${C_YELLOW}${C_BOLD}[v${current_ver} -> ¡NUEVA v${remote_ver} DISPONIBLE!]${C_RESET}"
-        opt_9_txt="${C_BOLD}${C_GREEN}[9]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
+        ver_badge="${C_YELLOW}${C_BOLD}[v${current_ver} -> ¡v${remote_ver} DISPONIBLE!]${C_RESET}"
+        opt_9_txt="${C_GREEN}${C_BOLD}[9]${C_RESET}  ${C_GREEN}${C_BOLD}► ACTUALIZAR SCRIPT ★${C_RESET}"
     fi
 
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}       VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ${C_RESET}${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
-    echo -e " ${C_BOLD}S.O.:${C_RESET} ${os_pretty} ($(uname -m))     ${host_line}"
-    echo -e " ${C_BOLD}Uptime:${C_RESET} ${uptime_txt}                     ${C_BOLD}Disco /:${C_RESET} ${disk_txt}"
-    echo -e " ${C_BOLD}RAM:${C_RESET} ${C_CYAN}${ram_bar}${C_RESET} ${ram_txt}    ${C_BOLD}CPU:${C_RESET} ${cpu_load}"
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}★ VPS-SSH-LIMITER MANAGER ★${C_RESET}       ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+    echo -e " ${C_BOLD}S.O.   :${C_RESET} ${os_pretty} ($(uname -m))"
+    echo -e " ${C_BOLD}Host/IP:${C_RESET} ${C_GREEN}${host_disp}${C_RESET}"
+    echo -e " ${C_BOLD}Uptime :${C_RESET} ${uptime_txt} | ${C_BOLD}Disco:${C_RESET} ${disk_txt}"
+    echo -e " ${C_BOLD}RAM    :${C_RESET} ${C_CYAN}${ram_bar}${C_RESET} ${ram_txt} | ${C_BOLD}CPU:${C_RESET} ${cpu_load}"
     echo -e " ${C_BOLD}Versión:${C_RESET} ${ver_badge}"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
-    echo -e " ${C_BOLD}SERVICIOS:${C_RESET}  SSH: ${s_ssh}  Dropbear: ${s_drop}  WS(80): ${s_ws}  Limitador: ${s_lim}"
-    echo -e " ${C_BOLD}CUENTAS:${C_RESET}    Total: ${C_BOLD}${u_total}${C_RESET}  |  Online: ${C_GREEN}${u_online}${C_RESET}  |  Expiradas: ${C_RED}${u_exp}${C_RESET}  |  Tráfico VPS: ${C_BOLD}${C_GREEN}${srv_total_fmt}${C_RESET}"
-    echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[1]${C_RESET}  ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}    ${C_GRAY}(Crear, Renovar, Modificar, Bloquear, Eliminar)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[2]${C_RESET}  ${C_BOLD}► MONITOR DE CONEXIONES${C_RESET}  ${C_GRAY}(Tabla en vivo, Tráfico de datos y conexiones)${C_RESET}"
-    echo -e " ${C_BOLD}${C_GREEN}[3]${C_RESET}  ${C_BOLD}${C_GREEN}► BANNERS Y BIENVENIDA${C_RESET}   ${C_GRAY}(Mensajes en apps, plantillas, días y límites)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET}  ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET}  ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Dropbear, WebSocket Proxy 80, Reiniciar SSH)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[6]${C_RESET}  ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
-    echo -e " ${C_BOLD}${C_CYAN}[7]${C_RESET}  ${C_BOLD}${C_CYAN}► DOMINIOS Y HOSTS 100% GRATIS${C_RESET} ${C_GRAY}(Asistente Guiado, Cloudflare, DuckDNS)${C_RESET}"
-    echo -e " ${C_BOLD}${C_CYAN}[8]${C_RESET}  ${C_BOLD}${C_CYAN}► GUÍA & ASISTENTE HTTP CUSTOM${C_RESET} ${C_GRAY}(Asistente CDN, Payloads, Fronting)${C_RESET}"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+    echo -e " ${C_BOLD}SERVICIOS:${C_RESET} SSH:${s_ssh} Drop:${s_drop} WS:${s_ws} Lim:${s_lim}"
+    echo -e " ${C_BOLD}CUENTAS  :${C_RESET} Tot:${C_BOLD}${u_total}${C_RESET} | On:${C_GREEN}${u_online}${C_RESET} | Exp:${C_RED}${u_exp}${C_RESET}"
+    echo -e " ${C_BOLD}TRÁFICO  :${C_RESET} ${C_GREEN}${srv_total_fmt}${C_RESET} Transferidos"
+    echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+    echo -e " ${C_YELLOW}${C_BOLD}[1]${C_RESET}  ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}"
+    echo -e " ${C_YELLOW}${C_BOLD}[2]${C_RESET}  ${C_BOLD}► MONITOR DE CONEXIONES Y DATOS${C_RESET}"
+    echo -e " ${C_GREEN}${C_BOLD}[3]${C_RESET}  ${C_BOLD}${C_GREEN}► BANNERS Y BIENVENIDA${C_RESET}"
+    echo -e " ${C_YELLOW}${C_BOLD}[4]${C_RESET}  ${C_BOLD}► DEMONIO LIMITADOR (SYSTEMD)${C_RESET}"
+    echo -e " ${C_YELLOW}${C_BOLD}[5]${C_RESET}  ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}"
+    echo -e " ${C_YELLOW}${C_BOLD}[6]${C_RESET}  ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET}"
+    echo -e " ${C_CYAN}${C_BOLD}[7]${C_RESET}  ${C_BOLD}${C_CYAN}► DOMINIOS Y HOSTS 100% GRATIS${C_RESET}"
+    echo -e " ${C_CYAN}${C_BOLD}[8]${C_RESET}  ${C_BOLD}${C_CYAN}► GUÍA & ASISTENTE HTTP CUSTOM${C_RESET}"
     echo -e " $opt_9_txt"
-    echo -e " ${C_BOLD}${C_YELLOW}[10]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}    ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
-    echo -e " ${C_BOLD}${C_RED}[0]${C_RESET}  ${C_BOLD}► SALIR${C_RESET}"
-    echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
+    echo -e " ${C_YELLOW}${C_BOLD}[10]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}"
+    echo -e " ${C_RED}${C_BOLD}[0]${C_RESET}  ${C_BOLD}► SALIR DEL PANEL${C_RESET}"
+    echo -e "${C_CYAN}═════════════════════════════════════════${C_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -290,40 +305,47 @@ draw_dashboard() {
 menu_users() {
     while true; do
         clear
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}                GESTIÓN INTEGRAL DE USUARIOS                    ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Crear nuevo usuario túnel"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Renovar / Modificar usuario (Días, Límite o Contraseña)"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Bloquear / Desbloquear acceso a usuario"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} Expulsar sesiones activas de un usuario"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} Eliminar usuario del sistema"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} Ver detalles de una cuenta"
-        echo -e "  ${C_YELLOW}[7]${C_RESET} Ficha de datos para HTTP Custom (Exportar cliente)"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}        ${C_BOLD}${C_WHITE}★ GESTIÓN DE USUARIOS ★${C_RESET}        ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} 📋 Ver lista y consumo de cuentas"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} ➕ Crear nuevo usuario túnel"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} ✏️  Renovar / Modificar usuario"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} 🔒 Bloquear / Desbloquear usuario"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} ⚡ Expulsar sesiones activas"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} ❌ Eliminar usuario del sistema"
+        echo -e "  ${C_YELLOW}[7]${C_RESET} 🔍 Ver detalles de una cuenta"
+        echo -e "  ${C_YELLOW}[8]${C_RESET} 📱 Ficha cliente (HTTP Custom)"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_user=""
-        read -r -p "Seleccione una opción [0-7]: " opt_user || true
+        read -r -p " Seleccione una opción [0-8]: " opt_user || true
 
         case "${opt_user:-}" in
             1)
+                clear
+                run_bin ssh-online
+                press_enter
+                ;;
+            2)
                 echo -e "\n${C_BOLD}${C_CYAN}--- CREAR NUEVO USUARIO TÚNEL ---${C_RESET}"
                 local u_name="" u_pass="" u_days="" u_limit=""
-                read -r -p "Nombre de usuario: " u_name || true
-                read -r -p "Contraseña: " u_pass || true
-                read -r -p "Días de validez (ej: 30): " u_days || true
-                read -r -p "Límite de conexiones (ej: 2): " u_limit || true
+                read -r -p " Nombre de usuario: " u_name || true
+                read -r -p " Contraseña: " u_pass || true
+                read -r -p " Días de validez (ej: 30): " u_days || true
+                read -r -p " Límite de conexiones (ej: 2): " u_limit || true
 
                 if [[ -z "${u_name:-}" || -z "${u_pass:-}" || -z "${u_days:-}" || -z "${u_limit:-}" ]]; then
                     echo -e "${C_RED}[ERROR] Todos los campos son obligatorios.${C_RESET}"
                 else
-                    /usr/local/bin/ssh-useradd "$u_name" "$u_pass" "$u_days" "$u_limit" || true
+                    run_bin ssh-useradd "$u_name" "$u_pass" "$u_days" "$u_limit" || true
                 fi
                 press_enter
                 ;;
-            2)
+            3)
                 echo -e "\n${C_BOLD}${C_CYAN}--- RENOVAR / MODIFICAR USUARIO ---${C_RESET}"
                 local u_name=""
-                read -r -p "Usuario a modificar: " u_name || true
+                read -r -p " Usuario a modificar: " u_name || true
                 if [[ -z "${u_name:-}" ]]; then
                     echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
                 elif ! id "$u_name" >/dev/null 2>&1; then
@@ -331,93 +353,93 @@ menu_users() {
                 else
                     echo -e "Deje en blanco los campos que NO desee cambiar:"
                     local m_days="" m_limit="" m_pass=""
-                    read -r -p "Días adicionales a renovar (ej: 30): " m_days || true
-                    read -r -p "Nuevo límite de conexiones (ej: 3): " m_limit || true
-                    read -r -p "Nueva contraseña: " m_pass || true
+                    read -r -p " Días adicionales a renovar (ej: 30): " m_days || true
+                    read -r -p " Nuevo límite de conexiones (ej: 3): " m_limit || true
+                    read -r -p " Nueva contraseña: " m_pass || true
 
                     local cmd_args=("$u_name")
                     if [[ -n "${m_days:-}" ]]; then cmd_args+=(--days "$m_days"); fi
                     if [[ -n "${m_limit:-}" ]]; then cmd_args+=(--limit "$m_limit"); fi
                     if [[ -n "${m_pass:-}" ]]; then cmd_args+=(--password "$m_pass"); fi
 
-                    /usr/local/bin/ssh-usermod "${cmd_args[@]}" || true
+                    run_bin ssh-usermod "${cmd_args[@]}" || true
                 fi
                 press_enter
                 ;;
-            3)
+            4)
                 echo -e "\n${C_BOLD}${C_CYAN}--- BLOQUEAR / DESBLOQUEAR USUARIO ---${C_RESET}"
                 local u_name=""
-                read -r -p "Usuario: " u_name || true
+                read -r -p " Usuario: " u_name || true
                 if [[ -z "${u_name:-}" ]]; then
                     echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
                 elif ! id "$u_name" >/dev/null 2>&1; then
                     echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
                 else
-                    /usr/local/bin/ssh-userlock "$u_name" status
+                    run_bin ssh-userlock "$u_name" status
                     echo -e "Acción: [1] Bloquear  [2] Desbloquear  [0] Cancelar"
                     local lock_opt=""
-                    read -r -p "Opción: " lock_opt || true
+                    read -r -p " Opción: " lock_opt || true
                     if [[ "${lock_opt:-}" == "1" ]]; then
-                        /usr/local/bin/ssh-userlock "$u_name" lock
+                        run_bin ssh-userlock "$u_name" lock
                     elif [[ "${lock_opt:-}" == "2" ]]; then
-                        /usr/local/bin/ssh-userlock "$u_name" unlock
+                        run_bin ssh-userlock "$u_name" unlock
                     fi
                 fi
                 press_enter
                 ;;
-            4)
+            5)
                 echo -e "\n${C_BOLD}${C_CYAN}--- EXPULSAR SESIONES ACTIVAS ---${C_RESET}"
                 local u_name=""
-                read -r -p "Usuario a desconectar (o presione Enter para cancelar): " u_name || true
+                read -r -p " Usuario a desconectar: " u_name || true
                 if [[ -n "${u_name:-}" ]]; then
-                    /usr/local/bin/ssh-killuser "$u_name" || true
+                    run_bin ssh-killuser "$u_name" || true
                 fi
                 press_enter
                 ;;
-            5)
+            6)
                 echo -e "\n${C_BOLD}${C_RED}--- ELIMINAR USUARIO DEL SISTEMA ---${C_RESET}"
                 local u_name=""
-                read -r -p "Nombre de usuario a eliminar: " u_name || true
+                read -r -p " Nombre de usuario a eliminar: " u_name || true
                 if [[ -n "${u_name:-}" ]]; then
                     local confirm=""
-                    read -r -p "¿Está seguro de eliminar '$u_name'? [s/N]: " confirm || true
+                    read -r -p " ¿Está seguro de eliminar '$u_name'? [s/N]: " confirm || true
                     if [[ "${confirm:-}" =~ ^[sS]$ ]]; then
-                        /usr/local/bin/ssh-userdel "$u_name" || true
+                        run_bin ssh-userdel "$u_name" || true
                     else
                         echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
                     fi
                 fi
                 press_enter
                 ;;
-            6)
+            7)
                 echo -e "\n${C_BOLD}${C_CYAN}--- DETALLES DE CUENTA ---${C_RESET}"
                 local u_name=""
-                read -r -p "Usuario a consultar: " u_name || true
+                read -r -p " Usuario a consultar: " u_name || true
                 if [[ -n "${u_name:-}" ]]; then
                     if id "$u_name" >/dev/null 2>&1; then
-                        echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+                        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
                         id "$u_name"
                         chage -l "$u_name" 2>/dev/null || true
-                        /usr/local/bin/ssh-userlock "$u_name" status
-                        echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+                        run_bin ssh-userlock "$u_name" status
+                        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
                     else
                         echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
                     fi
                 fi
                 press_enter
                 ;;
-            7)
-                echo -e "\n${C_BOLD}${C_CYAN}--- GENERAR FICHA DE DATOS HTTP CUSTOM ---${C_RESET}"
+            8)
+                echo -e "\n${C_BOLD}${C_CYAN}--- GENERAR FICHA HTTP CUSTOM ---${C_RESET}"
                 local u_name="" u_pass=""
-                read -r -p "Usuario: " u_name || true
+                read -r -p " Usuario: " u_name || true
                 if [[ -z "${u_name:-}" ]]; then
                     echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
                 elif ! id "$u_name" >/dev/null 2>&1; then
-                    echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe en el sistema.${C_RESET}"
+                    echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
                 else
-                    read -r -p "Contraseña (opcional, para incluirla en el texto): " u_pass || true
+                    read -r -p " Contraseña (opcional): " u_pass || true
                     clear
-                    /usr/local/bin/ssh-httpcustom "$u_name" "${u_pass:-********}" || true
+                    run_bin ssh-httpcustom "$u_name" "${u_pass:-********}" || true
                 fi
                 press_enter
                 ;;
@@ -433,35 +455,36 @@ menu_users() {
 }
 
 # ------------------------------------------------------------------------------
-# SUBMENÚ 2: MONITOR DE CONEXIONES
+# SUBMENÚ 2: MONITOR DE CONEXIONES Y DATOS
 # ------------------------------------------------------------------------------
 menu_monitor() {
     while true; do
         clear
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}        MONITOREO DE CONEXIONES Y CONSUMO DE DATOS EN VIVO      ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Ver tabla de conexiones y consumo de datos (ssh-online)"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Monitor dinámico continuo (Refresco automático cada 2s)"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Expulsar todas las conexiones excedentes ahora"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}       ${C_BOLD}${C_WHITE}★ MONITOR DE CONEXIONES ★${C_RESET}       ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} 📋 Ver conexiones y datos ahora"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} 🔄 Monitor en vivo (Refresco 2s)"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} 🖥️  Modo horizontal ancho (PC)"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} ⚡ Expulsar excedentes ahora"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_mon=""
-        read -r -p "Seleccione una opción [0-3]: " opt_mon || true
+        read -r -p " Seleccione una opción [0-4]: " opt_mon || true
 
         case "${opt_mon:-}" in
             1)
                 clear
-                /usr/local/bin/ssh-online
+                run_bin ssh-online
                 press_enter
                 ;;
             2)
                 clear
-                echo -e "${C_CYAN}Iniciando monitor continuo. Presione ${C_BOLD}[Ctrl+C]${C_RESET} o ${C_BOLD}[q]${C_RESET} para volver al menú.${C_RESET}\n"
+                echo -e "${C_CYAN}Iniciando monitor continuo. Presione ${C_BOLD}[Ctrl+C]${C_RESET} o ${C_BOLD}[q]${C_RESET} para volver.${C_RESET}\n"
                 sleep 1
                 while true; do
                     clear
-                    /usr/local/bin/ssh-online
+                    run_bin ssh-online
                     echo -e "${C_GRAY}Refrescando en 2 segundos... (Presione 'q' para salir)${C_RESET}"
                     local key_press=""
                     read -t 2 -n 1 key_press || true
@@ -471,8 +494,13 @@ menu_monitor() {
                 done
                 ;;
             3)
+                clear
+                run_bin ssh-online --wide
+                press_enter
+                ;;
+            4)
                 echo -e "\n${C_BOLD}${C_CYAN}--- MITIGACIÓN MASIVA DE EXCEDENTES ---${C_RESET}"
-                /usr/local/bin/ssh-killuser --all-exceeded || true
+                run_bin ssh-killuser --all-exceeded || true
                 press_enter
                 ;;
             0)
@@ -492,18 +520,18 @@ menu_monitor() {
 menu_limiter() {
     while true; do
         clear
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}             CONTROL DEL DEMONIO LIMITADOR (SYSTEMD)            ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Ver estado del servicio (systemctl status)"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Iniciar / Habilitar limitador"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Detener limitador"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} Reiniciar limitador"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} Ver registros y mitigaciones en vivo (journalctl)"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}        ${C_BOLD}${C_WHITE}★ DEMONIO LIMITADOR ★${C_RESET}          ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} 📊 Ver estado del servicio"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} ▶️  Iniciar / Habilitar"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} ⏹️  Detener limitador"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} 🔄 Reiniciar limitador"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} 📜 Ver registros en vivo"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_lim=""
-        read -r -p "Seleccione una opción [0-5]: " opt_lim || true
+        read -r -p " Seleccione una opción [0-5]: " opt_lim || true
 
         case "${opt_lim:-}" in
             1)
@@ -549,9 +577,9 @@ menu_limiter() {
 menu_wsproxy() {
     while true; do
         clear
-        local ws_active="${C_RED}[DETENIDO]${C_RESET}"
+        local ws_active="${C_RED}[OFF]${C_RESET}"
         if systemctl is-active --quiet ssh-wsproxy 2>/dev/null; then
-            ws_active="${C_GREEN}[EN EJECUCIÓN]${C_RESET}"
+            ws_active="${C_GREEN}[ON]${C_RESET}"
         fi
 
         local l_port="80" t_port="143"
@@ -560,21 +588,22 @@ menu_wsproxy() {
             t_port=$(grep "^TARGET_PORT=" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null | cut -d= -f2 || echo "143")
         fi
 
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}     WEBSOCKET PROXY (PUERTO 80 / HTTP CUSTOM / CLOUDFLARE)     ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e " Estado: ${ws_active}  |  Escucha: ${C_YELLOW}0.0.0.0:${l_port}${C_RESET} -> Destino: ${C_GREEN}127.0.0.1:${t_port}${C_RESET}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Iniciar / Habilitar WebSocket Proxy (Puerto ${l_port})"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Detener WebSocket Proxy"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Reiniciar WebSocket Proxy"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} Cambiar puerto de escucha (actual: ${l_port})"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} Cambiar puerto de destino interno (actual: ${t_port})"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} Ver registros en vivo (journalctl -u ssh-wsproxy)"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al submenú de puertos"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}       ${C_BOLD}${C_WHITE}★ WEBSOCKET PROXY (80) ★${C_RESET}        ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e " Estado : ${ws_active}"
+        echo -e " Escucha: ${C_YELLOW}0.0.0.0:${l_port}${C_RESET} -> ${C_GREEN}127.0.0.1:${t_port}${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} ▶️  Iniciar WebSocket Proxy"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} ⏹️  Detener WebSocket Proxy"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} 🔄 Reiniciar WebSocket Proxy"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} ⚙️  Cambiar puerto escucha (${l_port})"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} 🎯 Cambiar puerto destino (${t_port})"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} 📜 Ver registros en vivo"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al submenú de puertos"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_ws=""
-        read -r -p "Seleccione una opción [0-6]: " opt_ws || true
+        read -r -p " Seleccione una opción [0-6]: " opt_ws || true
 
         case "${opt_ws:-}" in
             1)
@@ -593,10 +622,10 @@ menu_wsproxy() {
                 sleep 1.5
                 ;;
             4)
-                echo -e "\n${C_CYAN}--- CONFIGURAR PUERTO DE ESCUCHA DE WEBSOCKET PROXY ---${C_RESET}"
-                echo -e "Puerto actual: ${C_YELLOW}${l_port}${C_RESET} (Recomendado para HTTP Custom / Cloudflare: 80)"
+                echo -e "\n${C_CYAN}--- CONFIGURAR PUERTO DE ESCUCHA ---${C_RESET}"
+                echo -e "Puerto actual: ${C_YELLOW}${l_port}${C_RESET} (Recomendado HTTP Custom: 80)"
                 local new_lp=""
-                read -r -p "Nuevo puerto de escucha: " new_lp || true
+                read -r -p " Nuevo puerto de escucha: " new_lp || true
                 if [[ -n "${new_lp:-}" && "$new_lp" =~ ^[0-9]+$ ]]; then
                     mkdir -p /etc/vps-ssh-limiter
                     cat > /etc/vps-ssh-limiter/wsproxy.conf <<EOF
@@ -605,7 +634,7 @@ TARGET_HOST=127.0.0.1
 TARGET_PORT=${t_port}
 EOF
                     systemctl restart ssh-wsproxy 2>/dev/null || true
-                    echo -e "${C_GREEN}✔ Puerto de escucha cambiado a ${new_lp} y servicio reiniciado.${C_RESET}"
+                    echo -e "${C_GREEN}✔ Puerto cambiado a ${new_lp} y servicio reiniciado.${C_RESET}"
                 fi
                 press_enter
                 ;;
@@ -613,7 +642,7 @@ EOF
                 echo -e "\n${C_CYAN}--- CONFIGURAR PUERTO DESTINO (INTERNO) ---${C_RESET}"
                 echo -e "Puerto actual destino: ${C_GREEN}${t_port}${C_RESET} (143 = Dropbear, 22 = OpenSSH)"
                 local new_tp=""
-                read -r -p "Nuevo puerto destino (143 o 22): " new_tp || true
+                read -r -p " Nuevo puerto destino (143 o 22): " new_tp || true
                 if [[ -n "${new_tp:-}" && "$new_tp" =~ ^[0-9]+$ ]]; then
                     mkdir -p /etc/vps-ssh-limiter
                     cat > /etc/vps-ssh-limiter/wsproxy.conf <<EOF
@@ -646,33 +675,33 @@ EOF
 menu_ports() {
     while true; do
         clear
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}                 GESTIÓN DE PUERTOS Y PROTOCOLOS                ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Ver puertos activos (ss / netstat)"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Configurar puertos de Dropbear"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Administrar WebSocket Proxy (Puerto 80 para HTTP Custom / CDN)"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} Reiniciar servicio Dropbear"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} Reiniciar servicio OpenSSH"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}        ${C_BOLD}${C_WHITE}★ PUERTOS Y PROTOCOLOS ★${C_RESET}       ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} 🔍 Ver puertos activos"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} 🚪 Configurar puertos de Dropbear"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} 🌐 WebSocket Proxy (Puerto 80)"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} 🔄 Reiniciar Dropbear"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} 🔄 Reiniciar OpenSSH"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_ports=""
-        read -r -p "Seleccione una opción [0-5]: " opt_ports || true
+        read -r -p " Seleccione una opción [0-5]: " opt_ports || true
 
         case "${opt_ports:-}" in
             1)
-                echo -e "\n${C_BOLD}Puertos en escucha para SSH, Dropbear y WebSocket:${C_RESET}\n"
+                echo -e "\n${C_BOLD}Puertos en escucha:${C_RESET}\n"
                 ss -tulpn 2>/dev/null | grep -E 'sshd|dropbear|python|wsproxy' || netstat -tulpn 2>/dev/null | grep -E 'sshd|dropbear|python|wsproxy' || echo "No se detectaron puertos en escucha."
                 press_enter
                 ;;
             2)
-                echo -e "\n${C_BOLD}${C_CYAN}--- CONFIGURAR PUERTOS DE DROPBEAR ---${C_RESET}"
+                echo -e "\n${C_BOLD}${C_CYAN}--- CONFIGURAR PUERTOS DROPBEAR ---${C_RESET}"
                 echo -e "Configuración actual en /etc/default/dropbear:"
                 grep -E 'DROPBEAR_PORT|DROPBEAR_EXTRA_ARGS' /etc/default/dropbear 2>/dev/null || true
                 echo ""
                 local main_p="" extra_p=""
-                read -r -p "Puerto principal de Dropbear (ej: 143): " main_p || true
-                read -r -p "Puertos adicionales separados por espacio (ej: 90 109 443): " extra_p || true
+                read -r -p " Puerto principal (ej: 143): " main_p || true
+                read -r -p " Puertos adicionales (ej: 90 109 443): " extra_p || true
 
                 if [[ -n "${main_p:-}" ]]; then
                     sed -i "s/^DROPBEAR_PORT=.*/DROPBEAR_PORT=$main_p/" /etc/default/dropbear
@@ -686,7 +715,7 @@ menu_ports() {
                     extra_flags=$(echo "$extra_flags" | xargs)
                     sed -i "s|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS=\"$extra_flags\"|" /etc/default/dropbear
                     systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
-                    echo -e "${C_GREEN}✔ Puertos de Dropbear actualizados y servicio reiniciado.${C_RESET}"
+                    echo -e "${C_GREEN}✔ Puertos de Dropbear actualizados.${C_RESET}"
                 fi
                 press_enter
                 ;;
@@ -695,12 +724,12 @@ menu_ports() {
                 ;;
             4)
                 systemctl restart dropbear
-                echo -e "${C_GREEN}✔ Dropbear reiniciado correctamente.${C_RESET}"
+                echo -e "${C_GREEN}✔ Dropbear reiniciado.${C_RESET}"
                 sleep 1.5
                 ;;
             5)
                 systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
-                echo -e "${C_GREEN}✔ OpenSSH reiniciado correctamente.${C_RESET}"
+                echo -e "${C_GREEN}✔ OpenSSH reiniciado.${C_RESET}"
                 sleep 1.5
                 ;;
             0)
@@ -720,16 +749,16 @@ menu_ports() {
 menu_tools() {
     while true; do
         clear
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}             OPTIMIZACIÓN Y HERRAMIENTAS DEL SISTEMA            ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Limpiar Caché de RAM y Buffers"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Acelerador TCP BBR (Activar / Comprobar estado)"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Información detallada de CPU y Hardware"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}       ${C_BOLD}${C_WHITE}★ OPTIMIZACIÓN Y SISTEMA ★${C_RESET}      ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} 🧹 Limpiar RAM y Buffers"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} 🚀 Acelerador TCP BBR"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} 💻 Hardware y Procesador"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_tool=""
-        read -r -p "Seleccione una opción [0-3]: " opt_tool || true
+        read -r -p " Seleccione una opción [0-3]: " opt_tool || true
 
         case "${opt_tool:-}" in
             1)
@@ -748,7 +777,7 @@ menu_tools() {
                     echo -e "${C_GREEN}✔ El algoritmo TCP BBR ya se encuentra activo en el kernel.${C_RESET}"
                 else
                     local act_bbr=""
-                    read -r -p "¿Desea activar TCP BBR para mayor velocidad y menor latencia? [s/N]: " act_bbr || true
+                    read -r -p " ¿Desea activar TCP BBR? [s/N]: " act_bbr || true
                     if [[ "${act_bbr:-}" =~ ^[sS]$ ]]; then
                         echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
                         echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
@@ -785,6 +814,8 @@ menu_update() {
     clear
     if [[ -x /usr/local/bin/ssh-update ]]; then
         /usr/local/bin/ssh-update --reload-menu
+    elif [[ -f "${BASH_SOURCE[0]%/*}/ssh-update" ]]; then
+        bash "${BASH_SOURCE[0]%/*}/ssh-update" --reload-menu
     else
         echo -e "${C_CYAN}Descargando e instalando última versión del repositorio...${C_RESET}"
         curl -fsSL "https://raw.githubusercontent.com/sendeiser/tin-script/main/install.sh?v=$(date +%s)" | bash
@@ -798,15 +829,14 @@ menu_update() {
 # ------------------------------------------------------------------------------
 menu_uninstall() {
     clear
-    echo -e "\n${C_BOLD}${C_RED}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_RED}║                 DESINSTALACIÓN DE VPS-SSH-LIMITER                ║${C_RESET}"
-    echo -e "${C_BOLD}${C_RED}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_YELLOW}Esta acción detendrá el demonio ssh-limiter y eliminará todos los"
-    echo -e "binarios y atajos ('menu', 'tin', 'vps'). Los usuarios existentes"
-    echo -e "en el sistema no serán borrados.${C_RESET}\n"
+    echo -e "\n${C_BOLD}${C_RED}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_RED}║   DESINSTALACIÓN DE VPS-SSH-LIMITER   ║${C_RESET}"
+    echo -e "${C_BOLD}${C_RED}╚═══════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_YELLOW}Esta acción detendrá los servicios y eliminará los binarios y atajos ('menu', 'tin', 'vps')."
+    echo -e "Los usuarios existentes NO serán borrados.${C_RESET}\n"
 
     local conf_del=""
-    read -r -p "¿Está completamente seguro de desinstalar vps-ssh-limiter? [s/N]: " conf_del || true
+    read -r -p " ¿Está seguro de desinstalar? [s/N]: " conf_del || true
     if [[ "${conf_del:-}" =~ ^[sS]$ ]]; then
         if [[ -f /usr/local/bin/install.sh ]]; then
             /usr/local/bin/install.sh --uninstall
@@ -815,7 +845,7 @@ menu_uninstall() {
         fi
         exit 0
     else
-        echo -e "${C_CYAN}Desinstalación cancelada por el usuario.${C_RESET}"
+        echo -e "${C_CYAN}Desinstalación cancelada.${C_RESET}"
         press_enter
     fi
 }
@@ -824,19 +854,12 @@ menu_uninstall() {
 # Bucle Principal del Menú
 # ------------------------------------------------------------------------------
 if [[ "$(id -u)" -ne 0 ]]; then
-    echo -e "${C_RED}[ERROR]${C_RESET} Debe ejecutar el menú con permisos de superusuario: ${C_BOLD}sudo menu${C_RESET}" >&2
+    echo -e "${C_RED}[ERROR]${C_RESET} Debe ejecutar con permisos de superusuario: ${C_BOLD}sudo menu${C_RESET}" >&2
     exit 1
 fi
 
 menu_banner() {
-    if [[ -x /usr/local/bin/ssh-banner ]]; then
-        /usr/local/bin/ssh-banner
-    elif [[ -f "${BASH_SOURCE[0]%/*}/ssh-banner" ]]; then
-        bash "${BASH_SOURCE[0]%/*}/ssh-banner"
-    else
-        echo -e "${C_RED}[ERROR] Gestor de banner no encontrado.${C_RESET}"
-        press_enter
-    fi
+    run_bin ssh-banner
 }
 
 while true; do
@@ -851,20 +874,8 @@ while true; do
         4) menu_limiter ;;
         5) menu_ports ;;
         6) menu_tools ;;
-        7)
-            if [[ -x /usr/local/bin/ssh-domain ]]; then
-                /usr/local/bin/ssh-domain
-            else
-                bash "${BASH_SOURCE[0]%/*}/ssh-domain" 2>/dev/null || true
-            fi
-            ;;
-        8)
-            if [[ -x /usr/local/bin/ssh-httpcustom ]]; then
-                /usr/local/bin/ssh-httpcustom
-            else
-                bash "${BASH_SOURCE[0]%/*}/ssh-httpcustom" 2>/dev/null || true
-            fi
-            ;;
+        7) run_bin ssh-domain ;;
+        8) run_bin ssh-httpcustom ;;
         9) menu_update ;;
         10) menu_uninstall ;;
         0)

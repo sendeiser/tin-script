@@ -150,14 +150,13 @@ echo "${USERNAME}:${PASSWORD}" | chpasswd
 # Confirmación de salida formateada
 # ------------------------------------------------------------------------------
 echo -e "${C_GREEN}✔ Usuario creado exitosamente${C_RESET}"
-echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
-printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Usuario:" "$USERNAME"
-printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Límite simultáneo:" "${LIMIT} conexión(es)"
-printf "  ${C_BOLD}%-22s${C_RESET} %s (%s días)\n" "Fecha de expiración:" "$EXPIRY_DATE" "$DAYS"
-printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Shell asignada:" "$RESTRICTED_SHELL"
-printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Directorio de inicio:" "/nonexistent (Sin /home)"
-printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Registro GECOS:" "$RECORDED_GECOS"
-echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Usuario:" "$USERNAME"
+printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Límite:" "${LIMIT} conexión(es)"
+printf "  ${C_BOLD}%-15s${C_RESET} %s (%s d)\n" "Vencimiento:" "$EXPIRY_DATE" "$DAYS"
+printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Shell:" "$RESTRICTED_SHELL"
+printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Home:" "/nonexistent"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
 # Obtener IP pública, dominio y puertos para la ficha de conexión
 SERVER_IP=$(curl -s4 -m 1.5 https://api.ipify.org 2>/dev/null || \
@@ -184,8 +183,8 @@ if [[ -f /etc/default/dropbear ]]; then
     DROP_PORTS="$comb"
 fi
 
-echo -e "\n${C_BOLD}${C_CYAN}📋 FICHA PARA CLIENTE (HTTP CUSTOM / INJECTOR / VPN)${C_RESET}"
-echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+echo -e "\n${C_BOLD}${C_CYAN}📋 FICHA PARA CLIENTE (HTTP CUSTOM)${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 echo -e "🚀 *DATOS DE CONEXIÓN SSH*"
 if [[ -n "$SERVER_HOST" ]]; then
     echo -e "🌐 *Host / Dominio:* \`${SERVER_HOST}\`"
@@ -194,14 +193,16 @@ else
     echo -e "🌐 *Host / IP:* \`${SERVER_IP}\`"
 fi
 echo -e "🚪 *Puertos Dropbear:* \`${DROP_PORTS}\`"
+echo -e "🚪 *Puerto WS Proxy:* \`80\`"
 echo -e "🚪 *Puerto OpenSSH:* \`22\`"
 echo -e "👤 *Usuario:* \`${USERNAME}\`"
 echo -e "🔑 *Contraseña:* \`${PASSWORD}\`"
 echo -e "📅 *Vencimiento:* \`${EXPIRY_DATE}\` (${DAYS} días)"
 echo -e "📱 *Límite:* \`${LIMIT} conexión(es)\`"
+echo -e "📞 *Contacto:* \`3826432180\`"
 echo -e ""
-echo -e "⚡ *Formato Rápido (Pegar en HTTP Custom):*"
+echo -e "⚡ *Formato Rápido (HTTP Custom):*"
 echo -e "${C_YELLOW}${CONNECT_HOST}:143@${USERNAME}:${PASSWORD}${C_RESET}"
-echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
 exit 0

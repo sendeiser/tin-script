@@ -5,7 +5,7 @@
 # ==============================================================================
 set -euo pipefail
 
-CURRENT_VERSION="1.8.3"
+CURRENT_VERSION="1.8.4"
 VERSION_FILE="/etc/vps-ssh-limiter/version"
 if [[ -f "$VERSION_FILE" ]]; then
     CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
@@ -51,15 +51,15 @@ EOF
 done
 
 if [[ "$(id -u)" -ne 0 ]]; then
-    echo -e "${C_RED}[ERROR]${C_RESET} La actualización debe ejecutarse con permisos de superusuario: ${C_BOLD}sudo update${C_RESET}" >&2
+    echo -e "${C_RED}[ERROR]${C_RESET} Debe ejecutarse con permisos de superusuario: ${C_BOLD}sudo update${C_RESET}" >&2
     exit 1
 fi
 
-echo -e "\n${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}            ACTUALIZADOR AUTOMÁTICO DE VPS-SSH-LIMITER           ${C_RESET}${C_CYAN}║${C_RESET}"
-echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
+echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET}   ${C_BOLD}${C_WHITE}★ ACTUALIZADOR VPS-SSH-LIMITER ★${C_RESET}    ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
 
-echo -e " ${C_BOLD}Versión instalada:${C_RESET}  ${C_YELLOW}v${CURRENT_VERSION}${C_RESET}"
+echo -e " ${C_BOLD}Versión instalada:${C_RESET} ${C_YELLOW}v${CURRENT_VERSION}${C_RESET}"
 echo -e "${C_GRAY} Comprobando última versión en GitHub...${C_RESET}"
 
 REMOTE_VERSION=""

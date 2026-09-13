@@ -1049,25 +1049,24 @@ main_menu() {
             dom_badge="${C_GREEN}${C_BOLD}${active_dom}${C_RESET}"
         fi
 
-        echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-        echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}             GESTIÓN Y CREACIÓN DE DOMINIOS / HOST             ${C_RESET}${C_CYAN}║${C_RESET}"
-        echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-        echo -e " Host activo: ${dom_badge}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_BOLD}${C_YELLOW}⭐ [1] ASISTENTE GUIADO PASO A PASO (100% GRATUITO - Cero Costo)${C_RESET}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_CYAN}[2]${C_RESET} Dominio Instantáneo 1-Click (sslip.io - Cero registro)"
-        echo -e "  ${C_CYAN}[3]${C_RESET} DuckDNS Personalizado (*.duckdns.org - Gratuito dinámico)"
-        echo -e "  ${C_CYAN}[4]${C_RESET} Cloudflare API (Plan Gratuito \$0 - Detección automática)"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} Asignar / Cambiar dominio manualmente (Tu propio dominio)"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} Comprobar estado y diagnóstico DNS del dominio"
-        echo -e "  ${C_YELLOW}[7]${C_RESET} Eliminar dominio actual y volver a IP pública"
-        echo -e "  ${C_YELLOW}[8]${C_RESET} Guía educativa: ¿Cómo funcionan los dominios gratuitos?"
-        echo -e "  ${C_YELLOW}[9]${C_RESET} Administrar / Borrar credenciales guardadas"
-        echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
-        echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}★ DOMINIOS Y HOSTS GRATIS ★${C_RESET}       ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e " Host: ${dom_badge}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_BOLD}${C_YELLOW}[1] ⭐ Asistente Guiado (100% Gratis)${C_RESET}"
+        echo -e "  ${C_CYAN}[2]${C_RESET} ⚡ Instantáneo 1-Click (sslip.io)"
+        echo -e "  ${C_CYAN}[3]${C_RESET} 🦆 DuckDNS (*.duckdns.org)"
+        echo -e "  ${C_CYAN}[4]${C_RESET} ☁️  Cloudflare API (Plan \$0)"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} ✏️  Dominio propio manual"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} 🔍 Diagnóstico DNS en vivo"
+        echo -e "  ${C_YELLOW}[7]${C_RESET} ❌ Eliminar dominio y usar IP"
+        echo -e "  ${C_YELLOW}[8]${C_RESET} 📚 Guía dominios gratuitos"
+        echo -e "  ${C_YELLOW}[9]${C_RESET} 🔑 Administrar credenciales"
+        echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         local opt_dom=""
-        read -r -p "Seleccione una opción [0-9]: " opt_dom || true
+        read -r -p " Seleccione una opción [0-9]: " opt_dom || true
 
         case "${opt_dom:-}" in
             1) wizard_free_domains ;;
