@@ -136,10 +136,12 @@ get_system_user_info() {
         fi
 
         # 3. Conexiones activas en tiempo real
-        local s_pids d_pids
-        s_pids=$(pgrep -u "$target" -f "^sshd: $target@" 2>/dev/null | wc -w || echo 0)
-        d_pids=$(pgrep -u "$target" -x "dropbear" 2>/dev/null | wc -w || echo 0)
-        U_CONNS=$(( s_pids + d_pids ))
+        local s_raw d_raw
+        s_raw=$(pgrep -u "$target" -f "^sshd: $target@" 2>/dev/null || true)
+        d_raw=$(pgrep -u "$target" -x "dropbear" 2>/dev/null || true)
+        local -a s_pids=($s_raw)
+        local -a d_pids=($d_raw)
+        U_CONNS=$(( ${#s_pids[@]} + ${#d_pids[@]} ))
 
         # 4. Consumo de datos usado por el usuario (traffic.db + procesos vivos)
         local u_bytes=0
@@ -397,9 +399,11 @@ if [[ -n "$USER" && "$USER" != "root" && -t 1 ]]; then
     fi
 
     # Conexiones activas del usuario
-    _s_pids=$(pgrep -u "$USER" -f "^sshd: $USER@" 2>/dev/null | wc -w || echo 0)
-    _d_pids=$(pgrep -u "$USER" -x "dropbear" 2>/dev/null | wc -w || echo 0)
-    _conns=$(( _s_pids + _d_pids ))
+    _s_raw=$(pgrep -u "$USER" -f "^sshd: $USER@" 2>/dev/null || true)
+    _d_raw=$(pgrep -u "$USER" -x "dropbear" 2>/dev/null || true)
+    _s_pids=($_s_raw)
+    _d_pids=($_d_raw)
+    _conns=$(( ${#_s_pids[@]} + ${#_d_pids[@]} ))
 
     # Consumo de datos del usuario
     _u_bytes=0
