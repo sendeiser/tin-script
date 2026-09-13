@@ -33,8 +33,8 @@ ${C_BOLD}Uso:${C_RESET}
     ssh-useradd <usuario> <contraseña> <días_validez> <límite_conexiones>
 
 ${C_BOLD}Descripción:${C_RESET}
-    Crea una cuenta restringida en el sistema sin acceso a shell (/bin/false)
-    ni directorio /home (/nonexistent), orientada exclusivamente a túneles SSH y
+    Crea una cuenta restringida en el sistema con shell segura para túneles (ssh-tunnel-shell)
+    sin directorio /home (/nonexistent), orientada exclusivamente a túneles SSH y
     Dropbear. Asigna fecha de expiración del sistema y almacena de forma atómica
     la cuota de conexiones simultáneas en el campo GECOS de /etc/passwd (LIM:<N>).
 
@@ -109,15 +109,22 @@ fi
 # Calcular fecha de expiración en formato ISO (YYYY-MM-DD)
 EXPIRY_DATE=$(date -d "+${DAYS} days" +%Y-%m-%d 2>/dev/null || date -v "+${DAYS}d" +%Y-%m-%d)
 GECOS_VALUE="LIM:${LIMIT}"
-RESTRICTED_SHELL="/bin/false"
+RESTRICTED_SHELL="/usr/local/bin/ssh-tunnel-shell"
 
 # Asegurar que la shell restringida exista en el sistema
 if [[ ! -x "$RESTRICTED_SHELL" ]]; then
-    if [[ -x "/usr/sbin/nologin" ]]; then
-        RESTRICTED_SHELL="/usr/sbin/nologin"
-    else
+    if [[ -x "/bin/ssh-tunnel-shell" ]]; then
+        RESTRICTED_SHELL="/bin/ssh-tunnel-shell"
+    elif [[ -x "/bin/false" ]]; then
         RESTRICTED_SHELL="/bin/false"
+    else
+        RESTRICTED_SHELL="/usr/sbin/nologin"
     fi
+fi
+
+# Asegurar que la shell esté autorizada en /etc/shells para autenticación PAM
+if [[ -f /etc/shells ]] && ! grep -Fxq "$RESTRICTED_SHELL" /etc/shells 2>/dev/null; then
+    echo "$RESTRICTED_SHELL" >> /etc/shells
 fi
 
 # Intentar crear el usuario con el formato solicitado LIM:$LIMIT

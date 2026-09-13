@@ -1,0 +1,26 @@
+#!/bin/bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-tunnel-shell
+# Shell restringida y persistente para cuentas de túnel SSH (HTTP Custom, Dropbear, OpenSSH).
+# Mantiene la sesión activa para port-forwarding y VPN mientras el cliente esté conectado.
+# Imprime el banner personalizado del usuario y termina limpiamente al desconectar.
+# ==============================================================================
+
+# Imprimir banner individual del usuario si existe, o el banner global del sistema
+u="${USER:-$(id -un 2>/dev/null || true)}"
+user_banner="/etc/vps-ssh-limiter/banners/${u}.net"
+global_banner="/etc/vps-ssh-limiter/banner.net"
+
+if [[ -f "$user_banner" ]]; then
+    cat "$user_banner" 2>/dev/null || true
+elif [[ -f "$global_banner" ]]; then
+    cat "$global_banner" 2>/dev/null || true
+fi
+
+# Mantener la sesión activa en segundo plano consumiendo cualquier entrada sin ejecutar comandos
+while read -r _ 2>/dev/null; do
+    :
+done
+
+# Al recibir EOF o cerrarse el socket remoto, terminar limpiamente
+exit 0

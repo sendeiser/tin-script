@@ -214,7 +214,7 @@ PermitEmptyPasswords no
 AllowTcpForwarding yes
 GatewayPorts yes
 TCPKeepAlive yes
-ClientAliveInterval 60
+ClientAliveInterval 30
 ClientAliveCountMax 3
 EOF
 
@@ -225,19 +225,29 @@ if command -v sshd >/dev/null 2>&1; then
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Validación y Registro de Shells Restringidas en /etc/shells
+# 3. Validación y Registro de Shells Restringidas en /etc/shells y Migración
 # ------------------------------------------------------------------------------
 log_info "3/5 Garantizando compatibilidad de shells restringidas en /etc/shells..."
 
 SHELLS_FILE="/etc/shells"
-for target_shell in "/bin/false" "/usr/sbin/nologin"; do
+for target_shell in "/usr/local/bin/ssh-tunnel-shell" "/bin/ssh-tunnel-shell" "/bin/false" "/usr/sbin/nologin"; do
     if ! grep -Fxq "$target_shell" "$SHELLS_FILE" 2>/dev/null; then
         echo "$target_shell" >> "$SHELLS_FILE"
         log_info "Añadido $target_shell a $SHELLS_FILE"
     fi
 done
 
-log_success "Shells restringidas autorizadas para autenticación sin apertura de sesión interactiva."
+# Migrar usuarios existentes con shell /bin/false o nologin a ssh-tunnel-shell
+log_info "Actualizando cuentas de usuario hacia ssh-tunnel-shell persistente..."
+while IFS=: read -r u _ uid _ _ _ sh; do
+    if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+        if [[ "$sh" == "/bin/false" || "$sh" == "/usr/sbin/nologin" || "$sh" == *"/nologin" ]]; then
+            usermod -s /usr/local/bin/ssh-tunnel-shell "$u" 2>/dev/null || true
+        fi
+    fi
+done < /etc/passwd
+
+log_success "Shells restringidas y persistentes configuradas para autenticación estable en túneles SSH y HTTP Custom."
 
 # ------------------------------------------------------------------------------
 # 4. Instalación de Binarios CLI y Menú en /usr/local/bin
@@ -245,7 +255,7 @@ log_success "Shells restringidas autorizadas para autenticación sin apertura de
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy ssh-tunnel-shell menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -275,14 +285,16 @@ ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/custom
 ln -sf /usr/local/bin/ssh-domain /usr/local/bin/domain
 ln -sf /usr/local/bin/ssh-domain /usr/local/bin/dominio
 ln -sf /usr/local/bin/ssh-wsproxy /usr/local/bin/wsproxy
+ln -sf /usr/local/bin/ssh-tunnel-shell /usr/local/bin/tunnel-shell
+ln -sf /usr/local/bin/ssh-tunnel-shell /bin/ssh-tunnel-shell
 
-for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy; do
+for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy tunnel-shell; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.8.4" > /etc/vps-ssh-limiter/version
+echo "1.9.5" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'

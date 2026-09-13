@@ -142,17 +142,27 @@ track_pid_traffic() {
 }
 
 declare -A USER_ACTIVE_PIDS=()
+declare -A USER_SURPLUS_STRIKES=()
 
 load_all_user_connections() {
     USER_ACTIVE_PIDS=()
 
-    # 1. PIDs por UID de usuario
+    # 1. PIDs por UID de usuario (filtrado estricto por proceso sshd o dropbear)
     while IFS=: read -r u _ uid _ _ _ _; do
         [[ $uid -lt 1000 || "$u" == "nobody" || "$u" == "nogroup" ]] && continue
         USER_ACTIVE_PIDS["$u"]=""
         for p in $(pgrep -u "$u" 2>/dev/null || true); do
             [[ -z "$p" || ! "$p" =~ ^[0-9]+$ || ! -d "/proc/$p" ]] && continue
-            USER_ACTIVE_PIDS["$u"]="${USER_ACTIVE_PIDS["$u"]:-} $p"
+            local comm=""
+            [[ -r "/proc/$p/comm" ]] && comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
+            # Solo contabilizar procesos de conexión SSH reales (OpenSSH sshd o Dropbear)
+            # Ignorar shells (ssh-tunnel-shell, bash), systemd (--user), sd-pam, etc.
+            if [[ "$comm" == *"sshd"* || "$comm" == *"dropbear"* ]]; then
+                local cur="${USER_ACTIVE_PIDS["$u"]:-}"
+                if [[ ! " $cur " =~ " $p " ]]; then
+                    USER_ACTIVE_PIDS["$u"]="${cur} $p"
+                fi
+            fi
         done
     done < "$PASSWD_FILE"
 
@@ -244,6 +254,7 @@ while $RUNNING; do
 
             # Si no tiene conexiones activas, continuar al siguiente usuario
             if [[ $total_active -eq 0 ]]; then
+                USER_SURPLUS_STRIKES["$username"]=0
                 continue
             fi
 
@@ -251,6 +262,7 @@ while $RUNNING; do
             # Caso 1: Cuenta expirada -> Desconexión total inmediata
             # ------------------------------------------------------------------
             if is_account_expired "$username"; then
+                USER_SURPLUS_STRIKES["$username"]=0
                 log_msg "ALERT" "Usuario expirado '$username' tiene $total_active conexión(es) activa(s). Procediendo a cierre total."
                 terminate_pids_stepped "$username" "${all_pids[@]}"
                 continue
@@ -260,14 +272,28 @@ while $RUNNING; do
             # Caso 2: Concurrencia dentro de la cuota permitida
             # ------------------------------------------------------------------
             if [[ $total_active -le $limit ]]; then
+                USER_SURPLUS_STRIKES["$username"]=0
                 continue
             fi
 
             # ------------------------------------------------------------------
-            # Caso 3: Concurrencia excedida -> Mitigación escalonada
+            # Caso 3: Concurrencia excedida -> Mitigación escalonada con anti-bucle
             # ------------------------------------------------------------------
             surplus_count=$((total_active - limit))
-            log_msg "WARN" "Límite excedido para usuario '$username': $total_active activas vs $limit permitidas (Excedente: $surplus_count)"
+
+            # Protección contra bucle de reconexión rápida (debouncing):
+            # Durante reconexiones en apps móviles (como HTTP Custom), la sesión previa puede
+            # tardar 1-2 segundos en terminar de liberarse en el kernel (TCP FIN/WAIT).
+            # Conceder 1 ciclo de gracia (3s) para verificar si persiste antes de matar.
+            local strikes="${USER_SURPLUS_STRIKES["$username"]:-0}"
+            if [[ $strikes -eq 0 ]]; then
+                USER_SURPLUS_STRIKES["$username"]=1
+                log_msg "WARN" "Aviso para '$username': $total_active activas vs $limit permitidas (posible solapamiento de reconexión). Verificando en próximo ciclo..."
+                continue
+            fi
+
+            USER_SURPLUS_STRIKES["$username"]=0
+            log_msg "WARN" "Límite excedido confirmado para usuario '$username': $total_active activas vs $limit permitidas (Excedente: $surplus_count)"
 
             # Obtener lista de PIDs ordenados por tiempo de vida transcurrido (etimes)
             # ps -o pid=,etimes= -p <pids> --sort=-etimes

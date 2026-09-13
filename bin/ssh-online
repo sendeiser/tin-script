@@ -103,12 +103,20 @@ load_all_user_connections() {
             [[ -z "$p" || ! "$p" =~ ^[0-9]+$ || ! -d "/proc/$p" ]] && continue
             local comm=""
             [[ -r "/proc/$p/comm" ]] && comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
+            # Contabilizar únicamente procesos de transporte SSH auténticos
             if [[ "$comm" == *"dropbear"* ]]; then
-                USER_DROPBEAR_COUNT["$u"]=$(( ${USER_DROPBEAR_COUNT["$u"]:-0} + 1 ))
-            else
-                USER_SSH_COUNT["$u"]=$(( ${USER_SSH_COUNT["$u"]:-0} + 1 ))
+                local cur="${USER_ACTIVE_PIDS["$u"]:-}"
+                if [[ ! " $cur " =~ " $p " ]]; then
+                    USER_DROPBEAR_COUNT["$u"]=$(( ${USER_DROPBEAR_COUNT["$u"]:-0} + 1 ))
+                    USER_ACTIVE_PIDS["$u"]="${cur} $p"
+                fi
+            elif [[ "$comm" == *"sshd"* ]]; then
+                local cur="${USER_ACTIVE_PIDS["$u"]:-}"
+                if [[ ! " $cur " =~ " $p " ]]; then
+                    USER_SSH_COUNT["$u"]=$(( ${USER_SSH_COUNT["$u"]:-0} + 1 ))
+                    USER_ACTIVE_PIDS["$u"]="${cur} $p"
+                fi
             fi
-            USER_ACTIVE_PIDS["$u"]="${USER_ACTIVE_PIDS["$u"]:-} $p"
         done
     done
 

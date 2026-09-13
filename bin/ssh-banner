@@ -324,6 +324,45 @@ apply_banner_system() {
         rm -rf "${CONFIG_DIR}/banners" 2>/dev/null || true
     fi
 
+    # Garantizar shell persistente para túneles SSH y compatibilidad con HTTP Custom
+    if [[ ! -f /usr/local/bin/ssh-tunnel-shell ]]; then
+        cat > /usr/local/bin/ssh-tunnel-shell <<'EOF_TSH'
+#!/bin/bash
+u="${USER:-$(id -un 2>/dev/null || true)}"
+user_banner="/etc/vps-ssh-limiter/banners/${u}.net"
+global_banner="/etc/vps-ssh-limiter/banner.net"
+if [[ -f "$user_banner" ]]; then
+    cat "$user_banner" 2>/dev/null || true
+elif [[ -f "$global_banner" ]]; then
+    cat "$global_banner" 2>/dev/null || true
+fi
+while read -r _ 2>/dev/null; do
+    :
+done
+exit 0
+EOF_TSH
+        chmod 755 /usr/local/bin/ssh-tunnel-shell
+    fi
+    ln -sf /usr/local/bin/ssh-tunnel-shell /bin/ssh-tunnel-shell 2>/dev/null || true
+
+    # Registrar shell en /etc/shells si no existe
+    if [[ -f /etc/shells ]]; then
+        for s in "/usr/local/bin/ssh-tunnel-shell" "/bin/ssh-tunnel-shell"; do
+            if ! grep -Fxq "$s" /etc/shells 2>/dev/null; then
+                echo "$s" >> /etc/shells
+            fi
+        done
+    fi
+
+    # Migrar usuarios de túnel con /bin/false o nologin a ssh-tunnel-shell
+    while IFS=: read -r mu _ muid _ _ _ msh; do
+        if [[ $muid -ge 1000 && "$mu" != "nobody" && "$mu" != "nogroup" ]]; then
+            if [[ "$msh" == "/bin/false" || "$msh" == "/usr/sbin/nologin" || "$msh" == *"/nologin" ]]; then
+                usermod -s /usr/local/bin/ssh-tunnel-shell "$mu" 2>/dev/null || true
+            fi
+        fi
+    done < /etc/passwd
+
     # Configurar OpenSSH con banners específicos por usuario (Match User)
     local sshd_cfg="/etc/ssh/sshd_config"
     if [[ -f "$sshd_cfg" ]]; then
@@ -367,7 +406,7 @@ PermitEmptyPasswords no
 AllowTcpForwarding yes
 GatewayPorts yes
 TCPKeepAlive yes
-ClientAliveInterval 60
+ClientAliveInterval 30
 ClientAliveCountMax 3
 EOF_SSHD
 
@@ -382,7 +421,7 @@ EOF_SSHD
             match_blocks+="# BEGIN VPS-SSH-LIMITER USER BANNERS\n"
             while IFS=: read -r u _ uid _ _ _ _; do
                 if [[ $uid -ge 1000 && "$u" != "nobody" && -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
-                    match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n    PasswordAuthentication yes\n    AllowTcpForwarding yes\n"
+                    match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n    PasswordAuthentication yes\n    AllowTcpForwarding yes\n    TCPKeepAlive yes\n    ClientAliveInterval 30\n    ClientAliveCountMax 3\n"
                 fi
             done < /etc/passwd
             match_blocks+="# END VPS-SSH-LIMITER USER BANNERS\n"
