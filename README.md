@@ -59,7 +59,7 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.martinvps.online  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.8.1 - ACTUALIZADO]
+ Versión: [v1.8.2 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
