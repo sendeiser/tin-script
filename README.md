@@ -14,6 +14,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 ## 📑 Tabla de Contenidos
 
 - [Panel Interactivo Principal (menu / tin / vps)](#-panel-interactivo-principal-menu--tin--vps)
+- [Guía y Conexión en HTTP Custom (Android / iOS)](#-guía-y-conexión-en-http-custom-android--ios)
 - [Actualizador Automático en el Menú](#-actualizador-automático-en-el-menú)
 - [Arquitectura y Principios de Diseño](#-arquitectura-y-principios-de-diseño)
 - [Instalación](#-instalación)
@@ -29,6 +30,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
   - [ssh-killuser](#ssh-killuser)
   - [ssh-userdel](#ssh-userdel)
   - [ssh-online](#ssh-online)
+  - [ssh-httpcustom / httpcustom](#ssh-httpcustom--httpcustom)
   - [ssh-limiter (Demonio)](#ssh-limiter-demonio)
 - [Supervisión con Systemd](#-supervisión-con-systemd)
 - [Configuración de Red y Dropbear](#-configuración-de-red-y-dropbear)
@@ -55,7 +57,7 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     IP Pública: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.3.0 - ACTUALIZADO]
+ Versión: [v1.4.0 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  OpenSSH: [ONLINE]   Dropbear: [ONLINE]   Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
@@ -65,11 +67,58 @@ sudo menu
  [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
  [4] ► PROTOCOLOS Y PUERTOS   (Puertos Dropbear, Reiniciar SSH/Dropbear)
  [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
- [6] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
- [7] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
+ [6] ► GUÍA & DATOS HTTP CUSTOM (Tutorial paso a paso, Payloads y Fichas)
+ [7] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
+ [8] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
  [0] ► SALIR
 ══════════════════════════════════════════════════════════════════════════════
 ```
+
+---
+
+## 📱 Guía y Conexión en HTTP Custom (Android / iOS)
+
+La suite incluye un módulo dedicado para conectar clientes en la app **HTTP Custom** (y apps similares como HTTP Injector o eProxy) utilizando las cuentas túnel de tu VPS.
+
+### 1. Formato Rápido de Importación (1-Click)
+En HTTP Custom puedes copiar y pegar la cadena directa en el campo de conexión:
+```text
+IP_VPS:PUERTO@USUARIO:CONTRASEÑA
+```
+*Ejemplo:* `198.51.100.24:143@juan:clave123`
+
+### 2. Configuración Manual Paso a Paso:
+1. Abre **HTTP Custom** en tu dispositivo.
+2. Marca la casilla **✔ SSH** en la pantalla principal.
+3. Abre el menú lateral `(☰)` en la esquina superior izquierda y pulsa **SSH Setting**.
+4. Rellena los datos de tu VPS:
+   - **Server IP / Host:** La IP de tu servidor VPS.
+   - **Server Port:** `143`, `90` o `109` (Dropbear) o `22` (OpenSSH).
+   - **Username:** Nombre de usuario creado.
+   - **Password:** Contraseña del usuario.
+5. Regresa y pulsa **CONNECT**. En la pestaña **LOG** verás: `HTTP Custom: Connected`.
+
+### 3. Ficha Automática para Enviar a Clientes (WhatsApp / Telegram)
+Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automáticamente una ficha lista para copiar:
+```text
+🚀 *DATOS DE TU CUENTA SSH / HTTP CUSTOM*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌐 *Host / IP:* 198.51.100.24
+🚪 *Puertos Dropbear:* 143, 90, 109 (Recomendados)
+🚪 *Puerto OpenSSH:* 22
+👤 *Usuario:* juan
+🔑 *Contraseña:* clave123
+📅 *Vencimiento:* 2026-10-12 (30 días)
+📱 *Límite de Conexiones:* 2 dispositivo(s)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ *Formato Rápido de Importación en HTTP Custom:*
+198.51.100.24:143@juan:clave123
+```
+
+### 4. Recomendaciones Anti-Desconexiones:
+- **Activar Auto-Ping:** En el menú lateral de HTTP Custom, activa **Auto Ping** con un intervalo de **3 a 5 segundos** para mantener el socket SSH siempre activo.
+- **Batería sin restricciones:** En Android -> Ajustes -> Aplicaciones -> HTTP Custom -> Batería -> "Sin restricciones" para evitar que el sistema cierre la app en segundo plano.
+- **Respetar el límite simultáneo:** Si el cliente supera el límite asignado (por ejemplo, 2 conexiones), el demonio `ssh-limiter` cerrará de inmediato la conexión excedente más reciente.
 
 ---
 
@@ -77,11 +126,11 @@ sudo menu
 
 El sistema cuenta con **detección inteligente de versiones**:
 1. Cada vez que abres el menú, consulta en segundo plano la última versión disponible en GitHub.
-2. Si detecta una nueva actualización, la opción **`[6] ► ACTUALIZAR SCRIPT`** se resalta automáticamente con una alerta visual:
+2. Si detecta una nueva actualización, la opción **`[7] ► ACTUALIZAR SCRIPT`** se resalta automáticamente con una alerta visual:
    ```text
-   [6] ► ACTUALIZAR SCRIPT ★ ¡NUEVA ACTUALIZACIÓN vX.Y.Z DISPONIBLE! ★
+   [7] ► ACTUALIZAR SCRIPT ★ ¡NUEVA ACTUALIZACIÓN vX.Y.Z DISPONIBLE! ★
    ```
-3. Al presionar **`6`**, el actualizador:
+3. Al presionar **`7`**, el actualizador:
    - Descarga los archivos y micro-scripts nuevos.
    - Preserva todas las cuentas y contraseñas de tus usuarios.
    - Reinicia los servicios correspondientes.
@@ -295,6 +344,30 @@ Muestra una tabla con el estado de todos los usuarios registrados, sus conexione
 ssh-online
 # O en formato JSON para bots y paneles web:
 ssh-online --json
+```
+
+---
+
+### `ssh-httpcustom` / `httpcustom`
+
+Herramienta interactiva y generador de fichas de conexión para la aplicación HTTP Custom, con tutorial paso a paso y ejemplos de payloads:
+
+```bash
+# Abrir el asistente interactivo de HTTP Custom:
+httpcustom
+# O también:
+custom
+# O con el comando completo:
+ssh-httpcustom
+
+# Generar ficha rápida para un usuario específico:
+ssh-httpcustom juan clave123
+
+# Ver la guía paso a paso directamente en la consola:
+ssh-httpcustom --guide
+
+# Ver ejemplos de Payloads (WebSocket, CDN, Direct, Proxy):
+ssh-httpcustom --payloads
 ```
 
 ---

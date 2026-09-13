@@ -159,4 +159,37 @@ printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Directorio de inicio:" "/nonexistent (
 printf "  ${C_BOLD}%-22s${C_RESET} %s\n" "Registro GECOS:" "$RECORDED_GECOS"
 echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
 
+# Obtener IP pública y puertos para la ficha de conexión
+SERVER_IP=$(curl -s4 -m 1.5 https://api.ipify.org 2>/dev/null || \
+            curl -s4 -m 1.5 https://icanhazip.com 2>/dev/null || \
+            ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n1 || \
+            hostname -I 2>/dev/null | awk '{print $1}' || echo "IP_VPS")
+
+DROP_PORTS="143, 90, 109"
+if [[ -f /etc/default/dropbear ]]; then
+    main_p=$(grep "^DROPBEAR_PORT=" /etc/default/dropbear | cut -d= -f2 | tr -d '"' | tr -d "'" || true)
+    extra_p=$(grep "^DROPBEAR_EXTRA_ARGS=" /etc/default/dropbear | grep -oP '(?<=-p )\d+' | tr '\n' ' ' || true)
+    comb="${main_p:-143}"
+    if [[ -n "$extra_p" ]]; then
+        comb+=", ${extra_p// /, }"
+        comb="${comb%, }"
+    fi
+    DROP_PORTS="$comb"
+fi
+
+echo -e "\n${C_BOLD}${C_CYAN}📋 FICHA PARA CLIENTE (HTTP CUSTOM / INJECTOR / VPN)${C_RESET}"
+echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+echo -e "🚀 *DATOS DE CONEXIÓN SSH*"
+echo -e "🌐 *Host / IP:* \`${SERVER_IP}\`"
+echo -e "🚪 *Puertos Dropbear:* \`${DROP_PORTS}\`"
+echo -e "🚪 *Puerto OpenSSH:* \`22\`"
+echo -e "👤 *Usuario:* \`${USERNAME}\`"
+echo -e "🔑 *Contraseña:* \`${PASSWORD}\`"
+echo -e "📅 *Vencimiento:* \`${EXPIRY_DATE}\` (${DAYS} días)"
+echo -e "📱 *Límite:* \`${LIMIT} conexión(es)\`"
+echo -e ""
+echo -e "⚡ *Formato Rápido (Pegar en HTTP Custom):*"
+echo -e "${C_YELLOW}${SERVER_IP}:143@${USERNAME}:${PASSWORD}${C_RESET}"
+echo -e "${C_GRAY}────────────────────────────────────────────────────${C_RESET}"
+
 exit 0

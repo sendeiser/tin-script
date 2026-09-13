@@ -211,7 +211,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.3.1"
+    local current_ver="1.4.0"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -220,11 +220,11 @@ draw_dashboard() {
     remote_ver=$(curl -s4 -m 1 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
 
     local ver_badge="${C_GREEN}[v${current_ver} - ACTUALIZADO]${C_RESET}"
-    local opt_6_txt="${C_BOLD}${C_YELLOW}[6]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
+    local opt_7_txt="${C_BOLD}${C_YELLOW}[7]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
 
     if [[ "$remote_ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$remote_ver" != "$current_ver" ]]; then
         ver_badge="${C_YELLOW}${C_BOLD}[v${current_ver} -> ¡NUEVA v${remote_ver} DISPONIBLE!]${C_RESET}"
-        opt_6_txt="${C_BOLD}${C_GREEN}[6]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
+        opt_7_txt="${C_BOLD}${C_GREEN}[7]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
     fi
 
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
@@ -243,8 +243,9 @@ draw_dashboard() {
     echo -e " ${C_BOLD}${C_YELLOW}[3]${C_RESET} ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET} ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Puertos Dropbear, Reiniciar SSH/Dropbear)${C_RESET}"
     echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET} ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
-    echo -e " $opt_6_txt"
-    echo -e " ${C_BOLD}${C_YELLOW}[7]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
+    echo -e " ${C_BOLD}${C_CYAN}[6]${C_RESET} ${C_BOLD}${C_CYAN}► GUÍA & DATOS HTTP CUSTOM${C_RESET} ${C_GRAY}(Tutorial paso a paso, Payloads y Fichas)${C_RESET}"
+    echo -e " $opt_7_txt"
+    echo -e " ${C_BOLD}${C_YELLOW}[8]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
     echo -e " ${C_BOLD}${C_RED}[0]${C_RESET} ${C_BOLD}► SALIR${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
 }
@@ -264,9 +265,10 @@ menu_users() {
         echo -e "  ${C_YELLOW}[4]${C_RESET} Expulsar sesiones activas de un usuario"
         echo -e "  ${C_YELLOW}[5]${C_RESET} Eliminar usuario del sistema"
         echo -e "  ${C_YELLOW}[6]${C_RESET} Ver detalles de una cuenta"
+        echo -e "  ${C_YELLOW}[7]${C_RESET} Ficha de datos para HTTP Custom (Exportar cliente)"
         echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
         local opt_user=""
-        read -r -p "Seleccione una opción [0-6]: " opt_user || true
+        read -r -p "Seleccione una opción [0-7]: " opt_user || true
 
         case "${opt_user:-}" in
             1)
@@ -367,6 +369,21 @@ menu_users() {
                     else
                         echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
                     fi
+                fi
+                press_enter
+                ;;
+            7)
+                echo -e "\n${C_BOLD}${C_CYAN}--- GENERAR FICHA DE DATOS HTTP CUSTOM ---${C_RESET}"
+                local u_name="" u_pass=""
+                read -r -p "Usuario: " u_name || true
+                if [[ -z "${u_name:-}" ]]; then
+                    echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+                elif ! id "$u_name" >/dev/null 2>&1; then
+                    echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe en el sistema.${C_RESET}"
+                else
+                    read -r -p "Contraseña (opcional, para incluirla en el texto): " u_pass || true
+                    clear
+                    /usr/local/bin/ssh-httpcustom "$u_name" "${u_pass:-********}" || true
                 fi
                 press_enter
                 ;;
@@ -676,7 +693,7 @@ fi
 while true; do
     draw_dashboard
     main_opt=""
-    read -r -p " Ingrese una opción [0-7]: " main_opt || true
+    read -r -p " Ingrese una opción [0-8]: " main_opt || true
 
     case "${main_opt:-}" in
         1) menu_users ;;
@@ -684,8 +701,15 @@ while true; do
         3) menu_limiter ;;
         4) menu_ports ;;
         5) menu_tools ;;
-        6) menu_update ;;
-        7) menu_uninstall ;;
+        6)
+            if [[ -x /usr/local/bin/ssh-httpcustom ]]; then
+                /usr/local/bin/ssh-httpcustom
+            else
+                bash "${BASH_SOURCE[0]%/*}/ssh-httpcustom" 2>/dev/null || true
+            fi
+            ;;
+        7) menu_update ;;
+        8) menu_uninstall ;;
         0)
             clear
             echo -e "${C_CYAN}Gracias por utilizar ${C_BOLD}vps-ssh-limiter${C_RESET}${C_CYAN}. ¡Hasta pronto!${C_RESET}\n"

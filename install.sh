@@ -98,7 +98,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f /etc/systemd/system/ssh-limiter.service
     systemctl daemon-reload 2>/dev/null || true
     
-    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update update menu tin vps; do
+    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom httpcustom custom update menu tin vps; do
         rm -f "/usr/local/bin/$b" "/usr/bin/$b"
     done
     rm -rf /etc/vps-ssh-limiter
@@ -189,7 +189,7 @@ log_success "Shells restringidas autorizadas para autenticación sin apertura de
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -213,16 +213,18 @@ fi
 ln -sf /usr/local/bin/menu /usr/local/bin/tin
 ln -sf /usr/local/bin/menu /usr/local/bin/vps
 ln -sf /usr/local/bin/ssh-update /usr/local/bin/update
+ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/httpcustom
+ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/custom
 
-for bin_name in "${BIN_LIST[@]}" tin vps update; do
+for bin_name in "${BIN_LIST[@]}" tin vps update httpcustom custom; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
 # Registrar versión instalada
 mkdir -p /etc/vps-ssh-limiter
-echo "1.3.1" > /etc/vps-ssh-limiter/version
+echo "1.4.0" > /etc/vps-ssh-limiter/version
 
-log_success "Binarios y atajos ('menu', 'update', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
+log_success "Binarios y atajos ('menu', 'update', 'httpcustom', 'tin', 'vps') vinculados en /usr/local/bin/ y /usr/bin/."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación del Demonio Systemd
@@ -288,6 +290,7 @@ echo -e "  ${C_CYAN}ssh-userlock <u|lock|unlock>${C_RESET}: Bloquear o desbloque
 echo -e "  ${C_CYAN}ssh-killuser <u|--all-exceeded>${C_RESET}: Desconectar sesiones activas"
 echo -e "  ${C_CYAN}ssh-userdel <usuario>${C_RESET}      : Revocar y eliminar usuario"
 echo -e "  ${C_CYAN}ssh-online${C_RESET}             : Monitor de conexiones en tiempo real (--json para APIs)"
+echo -e "  ${C_CYAN}ssh-httpcustom [usuario]${C_RESET}: Generador de fichas y guía para HTTP Custom (atajos: httpcustom, custom)"
 echo -e ""
 echo -e "${C_BOLD}Supervisión del Demonio:${C_RESET}"
 echo -e "  ${C_GRAY}systemctl status ssh-limiter${C_RESET}   : Estado del servicio"
