@@ -1,0 +1,8 @@
+# Auto-detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Force shell scripts and executables to always have LF line endings
+*.sh text eol=lf
+bin/* text eol=lf
+systemd/* text eol=lf
+version text eol=lf
