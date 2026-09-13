@@ -104,4 +104,12 @@ echo -e "  ● Usuario   : ${C_BOLD}${USERNAME}${C_RESET}"
 echo -e "  ● Estado    : ${C_RED}Revocado y Eliminado${C_RESET}"
 echo -e "  ● Procesos  : Sesiones SSH cerradas"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+
+# Actualizar banners del sistema y OpenSSH
+if command -v /usr/local/bin/ssh-banner >/dev/null 2>&1; then
+    /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
+elif [[ -x "/etc/vps-ssh-limiter/bin/ssh-banner" ]]; then
+    /etc/vps-ssh-limiter/bin/ssh-banner --apply >/dev/null 2>&1 || true
+fi
+
 exit 0

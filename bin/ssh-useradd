@@ -192,9 +192,9 @@ if [[ -n "$SERVER_HOST" ]]; then
 else
     echo -e "🌐 *Host / IP:* \`${SERVER_IP}\`"
 fi
+echo -e "🚪 *Puertos SSH Directo:* \`143, 22\`"
+echo -e "🚪 *Puerto WS Proxy (Payload):* \`80\`"
 echo -e "🚪 *Puertos Dropbear:* \`${DROP_PORTS}\`"
-echo -e "🚪 *Puerto WS Proxy:* \`80\`"
-echo -e "🚪 *Puerto OpenSSH:* \`22\`"
 echo -e "👤 *Usuario:* \`${USERNAME}\`"
 echo -e "🔑 *Contraseña:* \`${PASSWORD}\`"
 echo -e "📅 *Vencimiento:* \`${EXPIRY_DATE}\` (${DAYS} días)"

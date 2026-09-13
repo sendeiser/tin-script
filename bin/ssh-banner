@@ -328,32 +328,69 @@ apply_banner_system() {
         rm -rf "${CONFIG_DIR}/banners" 2>/dev/null || true
     fi
 
-    # Configurar OpenSSH
-    if [[ -f /etc/ssh/sshd_config ]]; then
-        if grep -q "^#\?Banner" /etc/ssh/sshd_config; then
-            sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" /etc/ssh/sshd_config
+    # Configurar OpenSSH con banners específicos por usuario (Match User)
+    local sshd_cfg="/etc/ssh/sshd_config"
+    if [[ -f "$sshd_cfg" ]]; then
+        # Asegurar directiva Banner global
+        if grep -q "^#\?Banner" "$sshd_cfg"; then
+            sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
         else
-            echo "Banner ${BANNER_FILE}" >> /etc/ssh/sshd_config
+            sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
         fi
-        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+
+        # Asegurar que OpenSSH escuche en puerto 22 y 143
+        if ! grep -E -q "^Port\s+143" "$sshd_cfg"; then
+            if grep -E -q "^Port\s+22" "$sshd_cfg"; then
+                sed -i "s|^Port\s\+22.*|Port 22\nPort 143|g" "$sshd_cfg"
+            elif grep -E -q "^#Port\s+22" "$sshd_cfg"; then
+                sed -i "s|^#Port\s\+22.*|Port 22\nPort 143|g" "$sshd_cfg"
+            else
+                echo "Port 22" >> "$sshd_cfg"
+                echo "Port 143" >> "$sshd_cfg"
+            fi
+        fi
+
+        # Limpiar bloques Match User previos de vps-ssh-limiter
+        if grep -q "# BEGIN VPS-SSH-LIMITER USER BANNERS" "$sshd_cfg"; then
+            sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
+        fi
+
+        # Si el banner está activado, añadir bloques Match User al final del archivo
+        if [[ "$BANNER_ENABLED" == "true" ]]; then
+            local match_blocks=""
+            match_blocks+="# BEGIN VPS-SSH-LIMITER USER BANNERS\n"
+            while IFS=: read -r u _ uid _ _ _ _; do
+                if [[ $uid -ge 1000 && "$u" != "nobody" && -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
+                    match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n"
+                fi
+            done < /etc/passwd
+            match_blocks+="# END VPS-SSH-LIMITER USER BANNERS\n"
+
+            echo -e "\n$match_blocks" >> "$sshd_cfg"
+        fi
+
+        # Validar sintaxis con sshd -t antes de recargar
+        if command -v sshd >/dev/null 2>&1; then
+            if sshd -t 2>/dev/null; then
+                systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+            else
+                # Si falló la sintaxis, revertir bloque Match
+                sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
+                systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+            fi
+        fi
     fi
 
-    # Configurar Dropbear
+    # Configurar Dropbear (en puertos 90 y 109 para liberar 143 a OpenSSH)
     if [[ -f /etc/default/dropbear ]]; then
+        sed -i 's|^DROPBEAR_PORT=.*|DROPBEAR_PORT=90|g' /etc/default/dropbear
         if grep -q "^#\?DROPBEAR_BANNER=" /etc/default/dropbear; then
             sed -i "s|^#\?DROPBEAR_BANNER=.*|DROPBEAR_BANNER=\"${BANNER_FILE}\"|g" /etc/default/dropbear
         else
             echo "DROPBEAR_BANNER=\"${BANNER_FILE}\"" >> /etc/default/dropbear
         fi
 
-        # Asegurar -b flag en DROPBEAR_EXTRA_ARGS (Obligatorio para systemd en Debian/Ubuntu)
-        local cur_extra=""
-        cur_extra=$(grep "^DROPBEAR_EXTRA_ARGS=" /etc/default/dropbear | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
-        cur_extra=$(echo "$cur_extra" | sed -E 's/-b\s+[^ ]+//g' | xargs)
-        if [[ -z "$cur_extra" ]]; then
-            cur_extra="-p 90 -p 109"
-        fi
-
+        local cur_extra="-p 109"
         if [[ "$BANNER_ENABLED" == "true" ]]; then
             cur_extra="${cur_extra} -b ${BANNER_FILE}"
         fi
