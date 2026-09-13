@@ -337,16 +337,11 @@ apply_banner_system() {
             sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
         fi
 
-        # Asegurar que OpenSSH escuche en puerto 22 y 143
-        if ! grep -E -q "^Port\s+143" "$sshd_cfg"; then
-            if grep -E -q "^Port\s+22" "$sshd_cfg"; then
-                sed -i "s|^Port\s\+22.*|Port 22\nPort 143|g" "$sshd_cfg"
-            elif grep -E -q "^#Port\s+22" "$sshd_cfg"; then
-                sed -i "s|^#Port\s\+22.*|Port 22\nPort 143|g" "$sshd_cfg"
-            else
-                echo "Port 22" >> "$sshd_cfg"
-                echo "Port 143" >> "$sshd_cfg"
-            fi
+        # Asegurar que OpenSSH no colisione con Dropbear en el puerto 143
+        sed -i '/^Port 143/d' "$sshd_cfg" 2>/dev/null || true
+        # Garantizar que OpenSSH acepte contraseñas
+        if grep -q "^#\?PasswordAuthentication" "$sshd_cfg"; then
+            sed -i 's|^#\?PasswordAuthentication.*|PasswordAuthentication yes|g' "$sshd_cfg"
         fi
 
         # Limpiar bloques Match User previos de vps-ssh-limiter
@@ -380,16 +375,16 @@ apply_banner_system() {
         fi
     fi
 
-    # Configurar Dropbear (en puertos 90 y 109 para liberar 143 a OpenSSH)
+    # Configurar Dropbear (puertos 143 principal, 90 y 109 secundarios)
     if [[ -f /etc/default/dropbear ]]; then
-        sed -i 's|^DROPBEAR_PORT=.*|DROPBEAR_PORT=90|g' /etc/default/dropbear
+        sed -i 's|^DROPBEAR_PORT=.*|DROPBEAR_PORT=143|g' /etc/default/dropbear
         if grep -q "^#\?DROPBEAR_BANNER=" /etc/default/dropbear; then
             sed -i "s|^#\?DROPBEAR_BANNER=.*|DROPBEAR_BANNER=\"${BANNER_FILE}\"|g" /etc/default/dropbear
         else
             echo "DROPBEAR_BANNER=\"${BANNER_FILE}\"" >> /etc/default/dropbear
         fi
 
-        local cur_extra="-p 109"
+        local cur_extra="-p 90 -p 109"
         if [[ "$BANNER_ENABLED" == "true" ]]; then
             cur_extra="${cur_extra} -b ${BANNER_FILE}"
         fi

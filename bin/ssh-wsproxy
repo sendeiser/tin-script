@@ -21,7 +21,7 @@ CONFIG_DIR = "/etc/vps-ssh-limiter"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "wsproxy.conf")
 DEFAULT_LISTEN_PORT = 80
 DEFAULT_TARGET_HOST = "127.0.0.1"
-DEFAULT_TARGET_PORT = 22
+DEFAULT_TARGET_PORT = 143
 BUFFER_SIZE = 32768
 TIMEOUT = 120
 
@@ -76,9 +76,9 @@ def connect_target(target_host, target_port):
     """
     Conecta al servicio SSH con tolerancia a fallos.
     Intenta el puerto configurado (Dropbear 143), y si no responde intenta
-    los puertos alternativos (22 de OpenSSH, 90, 109).
+    los puertos alternativos (90, 109, 22).
     """
-    ports = [target_port, 22, 143, 90, 109]
+    ports = [target_port, 143, 90, 109, 22]
     seen = set()
     for p in ports:
         if p in seen:

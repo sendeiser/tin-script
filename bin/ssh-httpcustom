@@ -147,9 +147,9 @@ show_client_card() {
     else
         echo -e "🌐 *Host / IP:* \`${ip}\`"
     fi
-    echo -e "🚪 *Puertos SSH Directo:* \`143, 22\`"
+    echo -e "🚪 *Puertos Dropbear:* \`${drop_ports}\` (Recomendados)"
     echo -e "🚪 *Puerto WebSocket Proxy:* \`80\` (Para Payloads / CDN Cloudflare)"
-    echo -e "🚪 *Puertos Dropbear:* \`${drop_ports}\`"
+    echo -e "🚪 *Puerto OpenSSH:* \`22\`"
     echo -e "👤 *Usuario:* \`${user}\`"
     echo -e "🔑 *Contraseña:* \`${pass}\`"
     echo -e "📅 *Vencimiento:* \`${exp_date}\` (${days_left} restantes)"
