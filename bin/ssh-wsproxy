@@ -78,7 +78,7 @@ def connect_target(target_host, target_port):
     Intenta el puerto configurado (OpenSSH 22 para banners individuales de usuario),
     y si no responde intenta los puertos alternativos (Dropbear 143, 90, 109).
     """
-    ports = [22, target_port, 143, 90, 109]
+    ports = [target_port, 22, 143, 90, 109]
     seen = set()
     for p in ports:
         if p in seen:

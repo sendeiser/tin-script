@@ -88,6 +88,13 @@ EOF
 get_system_user_info() {
     local req_user="${1:-}"
 
+    U_NAME="Cuenta Conectada"
+    U_EXP="Sin exp."
+    U_DAYS="Ilimitado"
+    U_TRAFFIC="0 B"
+    U_LIMIT="1"
+    U_CONNS="1"
+
     local target=""
     if [[ -n "$req_user" && "$req_user" != "auto" ]] && id "$req_user" >/dev/null 2>&1; then
         target="$req_user"
@@ -96,35 +103,6 @@ get_system_user_info() {
     elif [[ "$req_user" != "auto" && -n "$req_user" ]]; then
         target="$req_user"
     fi
-
-    # Si no se especificó un usuario fijo o es "auto", extraer el usuario de la base de datos del sistema (/etc/vps-ssh-limiter/users.db o /etc/passwd)
-    if [[ -z "$target" ]]; then
-        if [[ -f "/etc/vps-ssh-limiter/users.db" ]]; then
-            local last_db_u
-            last_db_u=$(tail -n1 "/etc/vps-ssh-limiter/users.db" 2>/dev/null | cut -d: -f1 || true)
-            if [[ -n "$last_db_u" ]] && id "$last_db_u" >/dev/null 2>&1; then
-                target="$last_db_u"
-            fi
-        fi
-        if [[ -z "$target" ]]; then
-            while IFS=: read -r u _ uid _ gecos _ msh; do
-                if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
-                    if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
-                        continue
-                    fi
-                    target="$u"
-                    break
-                fi
-            done < /etc/passwd
-        fi
-    fi
-
-    U_NAME="${target:-usuario_ssh}"
-    U_EXP="Sin exp."
-    U_DAYS="Ilimitado"
-    U_TRAFFIC="0 B"
-    U_LIMIT="1"
-    U_CONNS="1"
 
     if [[ -n "$target" ]]; then
         U_NAME="$target"
@@ -153,34 +131,6 @@ get_system_user_info() {
         else
             U_EXP="Sin exp."
             U_DAYS="Ilimitado"
-        fi
-
-        # Fallback de expiración y límite desde /etc/vps-ssh-limiter/users.db
-        if [[ -f /etc/vps-ssh-limiter/users.db ]]; then
-            local db_entry
-            db_entry=$(grep "^${target}:" /etc/vps-ssh-limiter/users.db 2>/dev/null | head -n1 || true)
-            if [[ -n "$db_entry" ]]; then
-                local db_exp db_lim
-                db_exp=$(echo "$db_entry" | cut -d: -f3 || true)
-                db_lim=$(echo "$db_entry" | cut -d: -f4 || true)
-                if [[ "$U_EXP" == "Sin exp." && -n "$db_exp" && "$db_exp" != "never" && "$db_exp" != "nunca" ]]; then
-                    local exp_epoch now_epoch
-                    exp_epoch=$(date -d "$db_exp" +%s 2>/dev/null || true)
-                    now_epoch=$(date +%s)
-                    if [[ -n "$exp_epoch" ]]; then
-                        U_EXP=$(date -d "@$exp_epoch" +%d/%m/%Y 2>/dev/null || echo "$db_exp")
-                        local diff=$(( (exp_epoch - now_epoch) / 86400 ))
-                        if [[ $diff -ge 0 ]]; then
-                            U_DAYS="${diff} día(s)"
-                        else
-                            U_DAYS="EXPIRADO"
-                        fi
-                    fi
-                fi
-                if [[ "$U_LIMIT" == "1" && -n "$db_lim" && "$db_lim" =~ ^[0-9]+$ ]]; then
-                    U_LIMIT="$db_lim"
-                fi
-            fi
         fi
 
         # 2. Límite de conexiones desde GECOS en /etc/passwd
@@ -360,29 +310,20 @@ refresh_user_banners() {
     [[ "$BANNER_ENABLED" != "true" ]] && return 0
     mkdir -p "${CONFIG_DIR}/banners"
 
-    declare -A seen_users=()
-    if [[ -f "${CONFIG_DIR}/users.db" ]]; then
-        while IFS=: read -r du _; do
-            [[ -n "$du" && "$du" != "#"* ]] && seen_users["$du"]=1
-        done < "${CONFIG_DIR}/users.db"
-    fi
-    while IFS=: read -r pu _ puid _ _ _ _; do
-        if [[ $puid -ge 1000 && "$pu" != "nobody" && "$pu" != "nogroup" ]]; then
-            if [[ "$pu" != "ubuntu" && "$pu" != "debian" && "$pu" != "root" && "$pu" != "admin" && "$pu" != "centos" && "$pu" != "cloud-user" && "$pu" != "systemd-"* && "$pu" != "nobody"* ]]; then
-                seen_users["$pu"]=1
+    while IFS=: read -r u _ uid _ gecos _ msh; do
+        if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+            if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
+                continue
+            fi
+            generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net.tmp" 2>/dev/null || true
+            if [[ -s "${CONFIG_DIR}/banners/${u}.net.tmp" ]]; then
+                mv -f "${CONFIG_DIR}/banners/${u}.net.tmp" "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+                chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+            else
+                rm -f "${CONFIG_DIR}/banners/${u}.net.tmp" 2>/dev/null || true
             fi
         fi
     done < /etc/passwd
-
-    for u in "${!seen_users[@]}"; do
-        generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net.tmp" 2>/dev/null || true
-        if [[ -s "${CONFIG_DIR}/banners/${u}.net.tmp" ]]; then
-            mv -f "${CONFIG_DIR}/banners/${u}.net.tmp" "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
-            chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
-        else
-            rm -f "${CONFIG_DIR}/banners/${u}.net.tmp" 2>/dev/null || true
-        fi
-    done
 }
 
 # ------------------------------------------------------------------------------
@@ -395,21 +336,6 @@ apply_banner_system() {
     mkdir -p "${CONFIG_DIR}/banners"
     mkdir -p "/etc/dropbear"
 
-    # Recopilar todos los usuarios creados (desde users.db y /etc/passwd)
-    declare -A target_users=()
-    if [[ -f "${CONFIG_DIR}/users.db" ]]; then
-        while IFS=: read -r du _; do
-            [[ -n "$du" && "$du" != "#"* ]] && target_users["$du"]=1
-        done < "${CONFIG_DIR}/users.db"
-    fi
-    while IFS=: read -r pu _ puid _ _ _ _; do
-        if [[ $puid -ge 1000 && "$pu" != "nobody" && "$pu" != "nogroup" ]]; then
-            if [[ "$pu" != "ubuntu" && "$pu" != "debian" && "$pu" != "root" && "$pu" != "admin" && "$pu" != "centos" && "$pu" != "cloud-user" && "$pu" != "systemd-"* && "$pu" != "nobody"* ]]; then
-                target_users["$pu"]=1
-            fi
-        fi
-    done < /etc/passwd
-
     if [[ "$BANNER_ENABLED" == "true" ]]; then
         if [[ "$TEMPLATE_ID" != "5" || ! -f "$BANNER_FILE" || ! -s "$BANNER_FILE" ]]; then
             generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "${BANNER_USER:-auto}" > "$BANNER_FILE"
@@ -419,10 +345,15 @@ apply_banner_system() {
         chmod 644 "$BANNER_FILE" "$ISSUE_FILE" "/etc/dropbear/banner" 2>/dev/null || true
 
         # Generar banners específicos por cada usuario cliente en /etc/vps-ssh-limiter/banners/<user>.net
-        for u in "${!target_users[@]}"; do
-            generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
-            chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
-        done
+        while IFS=: read -r u _ uid _ gecos _ msh; do
+            if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+                if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
+                    continue
+                fi
+                generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+                chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+            fi
+        done < /etc/passwd
     else
         echo -n "" > "$BANNER_FILE"
         echo -n "" > "$ISSUE_FILE"
@@ -473,10 +404,7 @@ apply_banner_system() {
         systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
     fi
 
-    # Liberar puerto 143 de Dropbear y sockets conflictivos
-    pkill -9 -f "dropbear.*143" 2>/dev/null || true
-    systemctl stop dropbear.socket 2>/dev/null || true
-    systemctl disable dropbear.socket 2>/dev/null || true
+    # Liberar puerto 143 de procesos zombies o remanentes de Dropbear
     if command -v fuser >/dev/null 2>&1; then
         fuser -k 143/tcp 2>/dev/null || true
     fi
@@ -484,11 +412,11 @@ apply_banner_system() {
     # 2. Configurar OpenSSH con banners específicos por usuario (Match User)
     local sshd_cfg="/etc/ssh/sshd_config"
     if [[ -f "$sshd_cfg" ]]; then
-        # Directiva global de Banner a none para permitir evaluación Match prioritaria
+        # Asegurar directiva Banner global al inicio para conexiones generales
         if grep -q "^#\?Banner" "$sshd_cfg"; then
-            sed -i "s|^#\?Banner.*|Banner none|g" "$sshd_cfg"
+            sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
         else
-            sed -i "1s|^|Banner none\n|" "$sshd_cfg"
+            sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
         fi
 
         # Asegurar puertos 22 y 143 para OpenSSH con banners individuales
@@ -512,13 +440,13 @@ apply_banner_system() {
         fi
 
         # Anular configuraciones restrictivas de proveedores cloud en /etc/ssh/sshd_config.d/
-        # y configurar opciones compatibles con todas las versiones de OpenSSH
         mkdir -p /etc/ssh/sshd_config.d
         sed -i 's|^PasswordAuthentication\s\+no|PasswordAuthentication yes|g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
         cat > /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf <<'EOF_SSHD'
 Port 22
 Port 143
 PasswordAuthentication yes
+KbdInteractiveAuthentication yes
 UsePAM yes
 PermitEmptyPasswords no
 AllowTcpForwarding yes
@@ -533,18 +461,26 @@ EOF_SSHD
             sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
         fi
 
-        # Si el banner está activado, añadir bloques Match User individuales y fallback Match all
+        # Si el banner está activado, añadir bloques Match User por cuenta (excluyendo admin VPS)
+        # IMPORTANTE: No incluir TCPKeepAlive dentro del bloque Match (sintaxis ilegal en Match de OpenSSH)
         if [[ "$BANNER_ENABLED" == "true" ]]; then
             {
                 echo "# BEGIN VPS-SSH-LIMITER USER BANNERS"
-                for u in "${!target_users[@]}"; do
-                    if [[ -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
-                        echo "Match User ${u}"
-                        echo "    Banner ${CONFIG_DIR}/banners/${u}.net"
+                while IFS=: read -r u _ uid _ gecos _ msh; do
+                    if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+                        if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
+                            continue
+                        fi
+                        if [[ -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
+                            echo "Match User ${u}"
+                            echo "    Banner ${CONFIG_DIR}/banners/${u}.net"
+                            echo "    PasswordAuthentication yes"
+                            echo "    AllowTcpForwarding yes"
+                            echo "    ClientAliveInterval 30"
+                            echo "    ClientAliveCountMax 3"
+                        fi
                     fi
-                done
-                echo "Match all"
-                echo "    Banner ${BANNER_FILE}"
+                done < /etc/passwd
                 echo "# END VPS-SSH-LIMITER USER BANNERS"
             } >> "$sshd_cfg"
         fi
@@ -554,9 +490,8 @@ EOF_SSHD
             if sshd -t 2>/dev/null; then
                 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
             else
-                # Si falló la sintaxis, revertir bloque Match manteniendo banner global
+                # Si falló la sintaxis, revertir bloque Match
                 sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
-                sed -i "s|^Banner none|Banner ${BANNER_FILE}|g" "$sshd_cfg" 2>/dev/null || true
                 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
             fi
         fi
@@ -809,25 +744,15 @@ select_user_for_banner() {
     echo -e "  Modo actual: ${C_CYAN}${current_mode}${C_RESET}\n"
     echo -e "  ${C_GREEN}[D]${C_RESET} Modo Dinámico Multiusuario ${C_YELLOW}(Recomendado - Cada cliente ve sus datos)${C_RESET}"
 
-    declare -A db_seen=()
-    if [[ -f "${CONFIG_DIR}/users.db" ]]; then
-        while IFS=: read -r du _; do
-            [[ -n "$du" && "$du" != "#"* ]] && db_seen["$du"]=1
-        done < "${CONFIG_DIR}/users.db"
-    fi
+    local users=()
     while IFS=: read -r u _ uid _ gecos _ msh; do
         if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
             if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* ]]; then
                 continue
             fi
-            db_seen["$u"]=1
+            users+=("$u")
         fi
     done < /etc/passwd
-
-    local users=()
-    for u in "${!db_seen[@]}"; do
-        users+=("$u")
-    done
 
     if [[ ${#users[@]} -gt 0 ]]; then
         echo -e "\n  ${C_GRAY}--- O asignar un usuario específico para probar o fijar: ---${C_RESET}"

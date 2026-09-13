@@ -172,34 +172,10 @@ echo -e "  ● Usuario     : ${C_BOLD}${USERNAME}${C_RESET}"
 echo -e "  ● Contacto    : ${C_WHITE}3826432180${C_RESET}"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
-# Sincronizar en la base de datos local /etc/vps-ssh-limiter/users.db
-mkdir -p /etc/vps-ssh-limiter
-if [[ -f /etc/vps-ssh-limiter/users.db ]]; then
-    old_line=$(grep "^${USERNAME}:" /etc/vps-ssh-limiter/users.db 2>/dev/null | head -n1 || true)
-    db_pass=$(echo "$old_line" | cut -d: -f2 || true)
-    db_exp=$(echo "$old_line" | cut -d: -f3 || true)
-    db_lim=$(echo "$old_line" | cut -d: -f4 || true)
-    db_created=$(echo "$old_line" | cut -d: -f5 || true)
-
-    [[ -n "$NEW_PASSWORD" ]] && db_pass="$NEW_PASSWORD"
-    [[ -n "${NEW_EXPIRY_DATE:-}" ]] && db_exp="$NEW_EXPIRY_DATE"
-    [[ -n "$NEW_LIMIT" ]] && db_lim="$NEW_LIMIT"
-    [[ -z "$db_created" ]] && db_created=$(date +%Y-%m-%d)
-
-    sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/users.db 2>/dev/null || true
-    echo "${USERNAME}:${db_pass:-pass}:${db_exp:-never}:${db_lim:-1}:${db_created}" >> /etc/vps-ssh-limiter/users.db
-    chmod 600 /etc/vps-ssh-limiter/users.db
-fi
-
 # Actualizar banners del sistema con los nuevos datos
 if command -v /usr/local/bin/ssh-banner >/dev/null 2>&1; then
-    /usr/local/bin/ssh-banner --user "$USERNAME" >/dev/null 2>&1 || true
     /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
-elif [[ -x "${BASH_SOURCE[0]%/*}/ssh-banner" ]]; then
-    bash "${BASH_SOURCE[0]%/*}/ssh-banner" --user "$USERNAME" >/dev/null 2>&1 || true
-    bash "${BASH_SOURCE[0]%/*}/ssh-banner" --apply >/dev/null 2>&1 || true
 elif [[ -x "/etc/vps-ssh-limiter/bin/ssh-banner" ]]; then
-    /etc/vps-ssh-limiter/bin/ssh-banner --user "$USERNAME" >/dev/null 2>&1 || true
     /etc/vps-ssh-limiter/bin/ssh-banner --apply >/dev/null 2>&1 || true
 fi
 
