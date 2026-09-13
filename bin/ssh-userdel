@@ -105,9 +105,22 @@ echo -e "  ● Estado    : ${C_RED}Revocado y Eliminado${C_RESET}"
 echo -e "  ● Procesos  : Sesiones SSH cerradas"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
+# Eliminar de la base de datos local /etc/vps-ssh-limiter/users.db y limpiar banner individual
+sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/users.db 2>/dev/null || true
+rm -f "/etc/vps-ssh-limiter/banners/${USERNAME}.net" 2>/dev/null || true
+
+# Si este usuario estaba fijado en banner.conf, revertir a auto
+if [[ -f /etc/vps-ssh-limiter/banner.conf ]]; then
+    if grep -q "^BANNER_USER=[\"']\?${USERNAME}[\"']\?" /etc/vps-ssh-limiter/banner.conf 2>/dev/null; then
+        sed -i 's|^BANNER_USER=.*|BANNER_USER="auto"|g' /etc/vps-ssh-limiter/banner.conf
+    fi
+fi
+
 # Actualizar banners del sistema y OpenSSH
 if command -v /usr/local/bin/ssh-banner >/dev/null 2>&1; then
     /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
+elif [[ -x "${BASH_SOURCE[0]%/*}/ssh-banner" ]]; then
+    bash "${BASH_SOURCE[0]%/*}/ssh-banner" --apply >/dev/null 2>&1 || true
 elif [[ -x "/etc/vps-ssh-limiter/bin/ssh-banner" ]]; then
     /etc/vps-ssh-limiter/bin/ssh-banner --apply >/dev/null 2>&1 || true
 fi

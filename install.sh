@@ -213,7 +213,6 @@ cat > /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf <<'EOF'
 Port 22
 Port 143
 PasswordAuthentication yes
-KbdInteractiveAuthentication yes
 UsePAM yes
 PermitEmptyPasswords no
 AllowTcpForwarding yes
@@ -222,6 +221,14 @@ TCPKeepAlive yes
 ClientAliveInterval 30
 ClientAliveCountMax 3
 EOF
+
+# Liberar puerto 143 de Dropbear y sockets conflictivos
+pkill -9 -f "dropbear.*143" 2>/dev/null || true
+systemctl stop dropbear.socket 2>/dev/null || true
+systemctl disable dropbear.socket 2>/dev/null || true
+if command -v fuser >/dev/null 2>&1; then
+    fuser -k 143/tcp 2>/dev/null || true
+fi
 
 if command -v sshd >/dev/null 2>&1; then
     if sshd -t 2>/dev/null; then
@@ -299,7 +306,33 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.9.9" > /etc/vps-ssh-limiter/version
+echo "2.0.1" > /etc/vps-ssh-limiter/version
+
+# Inicializar /etc/vps-ssh-limiter/users.db con cuentas de usuario existentes si no existe
+mkdir -p /etc/vps-ssh-limiter
+touch /etc/vps-ssh-limiter/users.db
+chmod 600 /etc/vps-ssh-limiter/users.db
+while IFS=: read -r u _ uid _ gecos _ msh; do
+    if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+        if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
+            continue
+        fi
+        if ! grep -q "^${u}:" /etc/vps-ssh-limiter/users.db 2>/dev/null; then
+            u_exp="never"
+            if command -v chage >/dev/null 2>&1; then
+                raw_exp=$(chage -l "$u" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
+                if [[ -n "$raw_exp" && "$raw_exp" != "never" && "$raw_exp" != "nunca" ]]; then
+                    u_exp=$(date -d "$raw_exp" +%Y-%m-%d 2>/dev/null || echo "$raw_exp")
+                fi
+            fi
+            u_lim="1"
+            if [[ "$gecos" =~ LIM:([0-9]+) || "$gecos" =~ LIM-([0-9]+) ]]; then
+                u_lim="${BASH_REMATCH[1]}"
+            fi
+            echo "${u}:ssh:${u_exp}:${u_lim}:$(date +%Y-%m-%d)" >> /etc/vps-ssh-limiter/users.db
+        fi
+    fi
+done < /etc/passwd
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]] || grep -q "TARGET_PORT=143" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'

@@ -153,6 +153,12 @@ fi
 # Asignación segura de contraseña
 echo "${USERNAME}:${PASSWORD}" | chpasswd
 
+# Registrar usuario en la base de datos local /etc/vps-ssh-limiter/users.db
+mkdir -p /etc/vps-ssh-limiter
+sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/users.db 2>/dev/null || true
+echo "${USERNAME}:${PASSWORD}:${EXPIRY_DATE}:${LIMIT}:$(date +%Y-%m-%d)" >> /etc/vps-ssh-limiter/users.db
+chmod 600 /etc/vps-ssh-limiter/users.db
+
 # ------------------------------------------------------------------------------
 # Confirmación de salida formateada
 # ------------------------------------------------------------------------------
@@ -212,10 +218,15 @@ echo -e "⚡ *Formato Rápido de Importación en HTTP Custom:*"
 echo -e "${C_YELLOW}${CONNECT_HOST}:143@${USERNAME}:${PASSWORD}${C_RESET}"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
-# Actualizar banners del sistema con los datos del nuevo usuario
+# Asignar automáticamente el nuevo usuario a las variables del banner
 if command -v /usr/local/bin/ssh-banner >/dev/null 2>&1; then
+    /usr/local/bin/ssh-banner --user "$USERNAME" >/dev/null 2>&1 || true
     /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
+elif [[ -x "${BASH_SOURCE[0]%/*}/ssh-banner" ]]; then
+    bash "${BASH_SOURCE[0]%/*}/ssh-banner" --user "$USERNAME" >/dev/null 2>&1 || true
+    bash "${BASH_SOURCE[0]%/*}/ssh-banner" --apply >/dev/null 2>&1 || true
 elif [[ -x "/etc/vps-ssh-limiter/bin/ssh-banner" ]]; then
+    /etc/vps-ssh-limiter/bin/ssh-banner --user "$USERNAME" >/dev/null 2>&1 || true
     /etc/vps-ssh-limiter/bin/ssh-banner --apply >/dev/null 2>&1 || true
 fi
 
