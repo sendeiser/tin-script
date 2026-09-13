@@ -267,7 +267,7 @@ draw_dashboard() {
     fi
 
     local remote_ver=""
-    remote_ver=$(curl -s4 -m 1 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+    remote_ver=$(curl -fsSL -m 2.5 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
 
     local active_dom=""
     if [[ -f /etc/vps-ssh-limiter/domain && -s /etc/vps-ssh-limiter/domain ]]; then
