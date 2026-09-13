@@ -212,7 +212,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.7.1"
+    local current_ver="1.7.2"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi

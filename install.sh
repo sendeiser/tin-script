@@ -170,8 +170,10 @@ DROPBEAR_BANNER=""
 DROPBEAR_RECEIVE_WINDOW=65536
 EOF
 
-# Habilitar y reiniciar Dropbear
+# Habilitar y reiniciar Dropbear (desactivar dropbear.socket para permitir puertos 143, 90, 109)
 log_info "Reiniciando Dropbear para aplicar nuevos puertos..."
+systemctl stop dropbear.socket 2>/dev/null || true
+systemctl disable dropbear.socket 2>/dev/null || true
 systemctl enable dropbear 2>/dev/null || true
 systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/null || true
 
@@ -234,7 +236,7 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.7.1" > /etc/vps-ssh-limiter/version
+echo "1.7.2" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'

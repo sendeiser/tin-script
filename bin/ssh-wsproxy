@@ -29,8 +29,7 @@ TIMEOUT = 120
 WS_101_RESPONSE = (
     b"HTTP/1.1 101 Switching Protocols\r\n"
     b"Upgrade: websocket\r\n"
-    b"Connection: Upgrade\r\n"
-    b"Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n"
+    b"Connection: Upgrade\r\n\r\n"
 )
 
 HTTP_200_RESPONSE = b"HTTP/1.1 200 Connection Established\r\n\r\n"
@@ -73,28 +72,107 @@ def save_config(listen_port, target_host, target_port):
         f.write(f"TARGET_PORT={target_port}\n")
 
 
-def forward_stream(source, destination):
+def connect_target(target_host, target_port):
+    """
+    Conecta al servicio SSH con tolerancia a fallos.
+    Intenta el puerto configurado (Dropbear 143), y si no responde intenta
+    los puertos alternativos (22 de OpenSSH, 90, 109).
+    """
+    ports = [target_port, 143, 22, 90, 109]
+    seen = set()
+    for p in ports:
+        if p in seen:
+            continue
+        seen.add(p)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            s.settimeout(2.0)
+            s.connect((target_host, p))
+            s.settimeout(None)
+            return s
+        except Exception:
+            try:
+                s.close()
+            except Exception:
+                pass
+    return None
+
+
+def forward_client_to_target(client_sock, target_sock):
+    """
+    Reenvia trafico del cliente hacia Dropbear/SSH.
+    Filtra y descarta encabezados HTTP residuales (como payloads split de HTTP Custom)
+    para que Dropbear reciba unicamenete paquetes SSH limpios.
+    """
+    ssh_started = False
     try:
         while True:
-            r, _, _ = select.select([source], [], [], TIMEOUT)
+            r, _, _ = select.select([client_sock], [], [], TIMEOUT)
             if not r:
                 break
-            data = source.recv(BUFFER_SIZE)
+            data = client_sock.recv(BUFFER_SIZE)
             if not data:
                 break
-            destination.sendall(data)
+
+            if not ssh_started:
+                while data:
+                    lower_data = data.lower().lstrip(b"\r\n ")
+                    if any(lower_data.startswith(m) for m in (b"get ", b"gett ", b"post ", b"head ", b"connect ", b"http/")):
+                        idx = data.find(b"\r\n\r\n")
+                        if idx != -1:
+                            data = data[idx + 4:].lstrip(b"\r\n ")
+                            try:
+                                client_sock.sendall(WS_101_RESPONSE)
+                            except Exception:
+                                pass
+                        else:
+                            data = b""
+                    else:
+                        data = data.lstrip(b"\r\n ")
+                        ssh_started = True
+                        break
+                if data:
+                    target_sock.sendall(data)
+            else:
+                target_sock.sendall(data)
     except Exception:
         pass
+    finally:
+        try:
+            target_sock.shutdown(socket.SHUT_WR)
+        except Exception:
+            pass
+
+
+def forward_target_to_client(target_sock, client_sock):
+    """
+    Reenvia la respuesta y banner de Dropbear/SSH hacia el cliente HTTP Custom.
+    """
+    try:
+        while True:
+            r, _, _ = select.select([target_sock], [], [], TIMEOUT)
+            if not r:
+                break
+            data = target_sock.recv(BUFFER_SIZE)
+            if not data:
+                break
+            client_sock.sendall(data)
+    except Exception:
+        pass
+    finally:
+        try:
+            client_sock.shutdown(socket.SHUT_WR)
+        except Exception:
+            pass
 
 
 def handle_client(client_sock, client_addr, target_host, target_port):
     target_sock = None
     try:
-        # Activar TCP_NODELAY para reducir latencia en tuneles SSH
         client_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-
-        # Leer encabezado HTTP inicial (hasta 8KB)
         client_sock.settimeout(15.0)
+
         initial_data = b""
         while b"\r\n\r\n" not in initial_data and len(initial_data) < 8192:
             try:
@@ -109,46 +187,47 @@ def handle_client(client_sock, client_addr, target_host, target_port):
             client_sock.close()
             return
 
-        # Conectar al servicio destino (Dropbear o SSH local)
-        target_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        target_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        target_sock.settimeout(10.0)
-        target_sock.connect((target_host, target_port))
-        target_sock.settimeout(None)
+        # Conectar al servicio destino SSH (con tolerancia y fallback)
+        target_sock = connect_target(target_host, target_port)
+        if not target_sock:
+            client_sock.close()
+            return
+
         client_sock.settimeout(None)
 
-        lower_data = initial_data.lower()
+        lower_data = initial_data.lower().lstrip(b"\r\n ")
+        is_http = any(lower_data.startswith(m) for m in (b"get ", b"gett ", b"post ", b"head ", b"connect ", b"http/")) or b"upgrade: websocket" in lower_data
 
-        # Deteccion de handshake WebSocket (Upgrade: websocket o metodos HTTP)
-        if b"upgrade: websocket" in lower_data or b"upgrade:websocket" in lower_data or b"connection: upgrade" in lower_data:
+        if is_http:
+            # Consumir y limpiar peticiones HTTP de initial_data (soporte para [split])
+            buffer = initial_data
+            while True:
+                idx = buffer.find(b"\r\n\r\n")
+                if idx == -1:
+                    buffer = b""
+                    break
+                buffer = buffer[idx + 4:].lstrip(b"\r\n ")
+                lower_rem = buffer.lower()
+                if any(lower_rem.startswith(m) for m in (b"get ", b"gett ", b"post ", b"head ", b"connect ")):
+                    continue
+                else:
+                    break
+
+            # Responder con 101 Switching Protocols
             client_sock.sendall(WS_101_RESPONSE)
-            # Si hay datos residuales tras \r\n\r\n en el paquete inicial, enviarlos al target
-            header_end = initial_data.find(b"\r\n\r\n")
-            if header_end != -1 and header_end + 4 < len(initial_data):
-                extra_payload = initial_data[header_end + 4:]
-                if extra_payload:
-                    target_sock.sendall(extra_payload)
 
-        elif lower_data.startswith(b"get ") or lower_data.startswith(b"gett ") or lower_data.startswith(b"post ") or lower_data.startswith(b"head "):
-            # Peticion HTTP regular (algunas apps usan 101 o 200)
-            client_sock.sendall(WS_101_RESPONSE)
-            header_end = initial_data.find(b"\r\n\r\n")
-            if header_end != -1 and header_end + 4 < len(initial_data):
-                extra_payload = initial_data[header_end + 4:]
-                if extra_payload:
-                    target_sock.sendall(extra_payload)
-
-        elif lower_data.startswith(b"connect "):
-            # Metodo CONNECT (Proxy HTTP tradicional)
-            client_sock.sendall(HTTP_200_RESPONSE)
-
+            # Si quedaron bytes residuales y corresponden a SSH, enviarlos al target
+            if buffer:
+                buffer = buffer.lstrip(b"\r\n ")
+                if buffer:
+                    target_sock.sendall(buffer)
         else:
-            # Conexion SSH o binaria directa sin cabeceras HTTP
+            # Conexion SSH o binaria directa sin cabecera HTTP
             target_sock.sendall(initial_data)
 
         # Iniciar reenvio bidireccional mediante hilos concurrentes
-        t1 = threading.Thread(target=forward_stream, args=(client_sock, target_sock), daemon=True)
-        t2 = threading.Thread(target=forward_stream, args=(target_sock, client_sock), daemon=True)
+        t1 = threading.Thread(target=forward_client_to_target, args=(client_sock, target_sock), daemon=True)
+        t2 = threading.Thread(target=forward_target_to_client, args=(target_sock, client_sock), daemon=True)
         t1.start()
         t2.start()
         t1.join()
