@@ -160,19 +160,19 @@ fi
 # ------------------------------------------------------------------------------
 # Encabezado visual de la tabla
 # ------------------------------------------------------------------------------
-echo -e "${C_BOLD}${C_CYAN}========================================================================================${C_RESET}"
-echo -e "${C_BOLD}   VPS-SSH-LIMITER :: MONITOR DE CONEXIONES EN TIEMPO REAL${C_RESET}  ${C_GRAY}($(date '+%Y-%m-%d %H:%M:%S'))${C_RESET}"
-echo -e "${C_BOLD}${C_CYAN}========================================================================================${C_RESET}"
+echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}       VPS-SSH-LIMITER :: MONITOR DE CONEXIONES EN TIEMPO REAL          ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
+echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
 
 if [[ $TOTAL_MANAGED -eq 0 ]]; then
-    echo -e "${C_YELLOW}No se encontraron usuarios con límites configurados (LIM:<N>) en /etc/passwd.${C_RESET}"
-    echo -e "Cree usuarios con: ${C_BOLD}ssh-useradd <usuario> <contraseña> <días> <límite>${C_RESET}\n"
+    echo -e "${C_YELLOW}⚠ No se encontraron usuarios túnel configurados en el sistema.${C_RESET}"
+    echo -e "Cree usuarios con: ${C_BOLD}${C_GREEN}ssh-useradd <usuario> <contraseña> <días> <límite>${C_RESET}\n"
     exit 0
 fi
 
-printf "${C_BOLD}%-16s %-6s %-10s %-7s %-7s %-14s %-18s${C_RESET}\n" \
-    "USUARIO" "SSH" "DROPBEAR" "TOTAL" "LÍMITE" "EXPIRACIÓN" "ESTADO"
-echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
+printf " ${C_BOLD}%-18s %-7s %-10s %-8s %-9s %-13s %-20s${C_RESET}\n" \
+    "USUARIO" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "EXPIRACIÓN" "ESTADO"
+echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
 
 ONLINE_USERS=0
 TOTAL_SSH_CONN=0
@@ -195,38 +195,39 @@ for entry in "${USERS_LIST[@]}"; do
         ONLINE_USERS=$((ONLINE_USERS + 1))
     fi
 
-    # Determinar estado y colo
-    user_color="${C_RESET}"
+    # Determinar estado, icono y color
+    user_color="${C_WHITE}"
+    quota_str="${total_conn}/${limit}"
     if [[ "$is_exp" == "SI" ]]; then
-        status_label="${C_RED}EXPIRADO${C_RESET}"
+        status_label="${C_RED}⏰ EXPIRADO${C_RESET}"
         user_color="${C_RED}"
     elif [[ "$total_conn" -gt "$limit" ]]; then
-        status_label="${C_RED}EXCEDIDO ($total_conn/$limit)${C_RESET}"
+        status_label="${C_RED}${C_BOLD}🚫 EXCEDIDO (${total_conn}/${limit})${C_RESET}"
         user_color="${C_RED}"
     elif [[ "$total_conn" -eq "$limit" && "$total_conn" -gt 0 ]]; then
-        status_label="${C_YELLOW}AL LÍMITE${C_RESET}"
+        status_label="${C_YELLOW}⚠️  AL LÍMITE (${total_conn}/${limit})${C_RESET}"
         user_color="${C_YELLOW}"
     elif [[ "$total_conn" -gt 0 ]]; then
-        status_label="${C_GREEN}ACTIVO${C_RESET}"
+        status_label="${C_GREEN}● ONLINE (${total_conn}/${limit})${C_RESET}"
         user_color="${C_GREEN}"
     else
-        status_label="${C_GRAY}OFFLINE${C_RESET}"
-        user_color="${C_RESET}"
+        status_label="${C_GRAY}○ Desconectado${C_RESET}"
+        user_color="${C_WHITE}"
     fi
 
-    printf "${user_color}%-16s${C_RESET} %-6d %-10d %-7d %-7d %-14s %b\n" \
+    printf " ${user_color}%-18s${C_RESET} %-7d %-10d %-8d %-9s %-13s %b\n" \
         "$user" \
         "$ssh_count" \
         "$dropbear_count" \
         "$total_conn" \
-        "$limit" \
+        "$quota_str" \
         "$exp_date" \
         "$status_label"
 done
 
-echo -e "${C_GRAY}────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
-printf "${C_BOLD}%-18s${C_RESET} ${C_CYAN}%d${C_RESET}   |   ${C_BOLD}Usuarios Online:${C_RESET} ${C_GREEN}%d${C_RESET}   |   ${C_BOLD}Conexiones:${C_RESET} SSH: ${C_YELLOW}%d${C_RESET} | Dropbear: ${C_YELLOW}%d${C_RESET} | Total: ${C_BOLD}%d${C_RESET}\n" \
-    "Total Registrados:" "$TOTAL_MANAGED" "$ONLINE_USERS" "$TOTAL_SSH_CONN" "$TOTAL_DROPBEAR_CONN" "$TOTAL_ALL_CONN"
-echo -e "${C_BOLD}${C_CYAN}========================================================================================${C_RESET}\n"
+echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
+printf " ${C_BOLD}%-15s${C_RESET} ${C_CYAN}%d${C_RESET}  |  ${C_BOLD}Online:${C_RESET} ${C_GREEN}%d${C_RESET}  |  ${C_BOLD}Conexiones:${C_RESET} SSH: ${C_YELLOW}%d${C_RESET} | Dropbear: ${C_YELLOW}%d${C_RESET} | Total: ${C_BOLD}${C_GREEN}%d${C_RESET}\n" \
+    "Registrados:" "$TOTAL_MANAGED" "$ONLINE_USERS" "$TOTAL_SSH_CONN" "$TOTAL_DROPBEAR_CONN" "$TOTAL_ALL_CONN"
+echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
 
 exit 0

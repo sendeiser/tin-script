@@ -212,7 +212,7 @@ draw_dashboard() {
         os_pretty=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
     fi
 
-    local current_ver="1.7.3"
+    local current_ver="1.8.0"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -233,11 +233,11 @@ draw_dashboard() {
     fi
 
     local ver_badge="${C_GREEN}[v${current_ver} - ACTUALIZADO]${C_RESET}"
-    local opt_8_txt="${C_BOLD}${C_YELLOW}[8]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
+    local opt_9_txt="${C_BOLD}${C_YELLOW}[9]${C_RESET} ${C_BOLD}► ACTUALIZAR SCRIPT${C_RESET}      ${C_GRAY}(Buscar e instalar actualizaciones desde GitHub)${C_RESET}"
 
     if [[ "$remote_ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [[ "$remote_ver" != "$current_ver" ]]; then
         ver_badge="${C_YELLOW}${C_BOLD}[v${current_ver} -> ¡NUEVA v${remote_ver} DISPONIBLE!]${C_RESET}"
-        opt_8_txt="${C_BOLD}${C_GREEN}[8]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
+        opt_9_txt="${C_BOLD}${C_GREEN}[9]${C_RESET} ${C_BOLD}${C_GREEN}► ACTUALIZAR SCRIPT${C_RESET}      ${C_YELLOW}${C_BOLD}★ ¡NUEVA ACTUALIZACIÓN v${remote_ver} DISPONIBLE! ★${C_RESET}"
     fi
 
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
@@ -251,16 +251,17 @@ draw_dashboard() {
     echo -e " ${C_BOLD}SERVICIOS:${C_RESET}  SSH: ${s_ssh}  Dropbear: ${s_drop}  WS(80): ${s_ws}  Limitador: ${s_lim}"
     echo -e " ${C_BOLD}CUENTAS:${C_RESET}    Total: ${C_BOLD}${u_total}${C_RESET}     |  Online: ${C_GREEN}${u_online}${C_RESET}     |  Expiradas: ${C_RED}${u_exp}${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[1]${C_RESET} ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}    ${C_GRAY}(Crear, Renovar, Modificar, Bloquear, Eliminar)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[2]${C_RESET} ${C_BOLD}► MONITOR DE CONEXIONES${C_RESET}  ${C_GRAY}(Tabla en vivo, Modo dinámico en tiempo real)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[3]${C_RESET} ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET} ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Dropbear, WebSocket Proxy 80, Reiniciar SSH)${C_RESET}"
-    echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET} ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
-    echo -e " ${C_BOLD}${C_CYAN}[6]${C_RESET} ${C_BOLD}${C_CYAN}► DOMINIOS Y HOSTS 100% GRATIS${C_RESET} ${C_GRAY}(Asistente Guiado, sslip.io, DuckDNS)${C_RESET}"
-    echo -e " ${C_BOLD}${C_CYAN}[7]${C_RESET} ${C_BOLD}${C_CYAN}► GUÍA & ASISTENTE HTTP CUSTOM${C_RESET} ${C_GRAY}(Asistente CDN, Payloads, Alternativas)${C_RESET}"
-    echo -e " $opt_8_txt"
-    echo -e " ${C_BOLD}${C_YELLOW}[9]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}     ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
-    echo -e " ${C_BOLD}${C_RED}[0]${C_RESET} ${C_BOLD}► SALIR${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[1]${C_RESET}  ${C_BOLD}► GESTIÓN DE USUARIOS${C_RESET}    ${C_GRAY}(Crear, Renovar, Modificar, Bloquear, Eliminar)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[2]${C_RESET}  ${C_BOLD}► MONITOR DE CONEXIONES${C_RESET}  ${C_GRAY}(Tabla en vivo, Modo dinámico en tiempo real)${C_RESET}"
+    echo -e " ${C_BOLD}${C_GREEN}[3]${C_RESET}  ${C_BOLD}${C_GREEN}► BANNERS Y BIENVENIDA${C_RESET}   ${C_GRAY}(Mensajes en apps, plantillas, días y límites)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[4]${C_RESET}  ${C_BOLD}► DEMONIO LIMITADOR${C_RESET}      ${C_GRAY}(Estado, Reiniciar, Logs en vivo, Configuración)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[5]${C_RESET}  ${C_BOLD}► PROTOCOLOS Y PUERTOS${C_RESET}   ${C_GRAY}(Dropbear, WebSocket Proxy 80, Reiniciar SSH)${C_RESET}"
+    echo -e " ${C_BOLD}${C_YELLOW}[6]${C_RESET}  ${C_BOLD}► OPTIMIZACIÓN Y SISTEMA${C_RESET} ${C_GRAY}(Limpiar RAM/Swap, Acelerador TCP BBR, Info)${C_RESET}"
+    echo -e " ${C_BOLD}${C_CYAN}[7]${C_RESET}  ${C_BOLD}${C_CYAN}► DOMINIOS Y HOSTS 100% GRATIS${C_RESET} ${C_GRAY}(Asistente Guiado, Cloudflare, DuckDNS)${C_RESET}"
+    echo -e " ${C_BOLD}${C_CYAN}[8]${C_RESET}  ${C_BOLD}${C_CYAN}► GUÍA & ASISTENTE HTTP CUSTOM${C_RESET} ${C_GRAY}(Asistente CDN, Payloads, Fronting)${C_RESET}"
+    echo -e " $opt_9_txt"
+    echo -e " ${C_BOLD}${C_YELLOW}[10]${C_RESET} ${C_BOLD}► DESINSTALAR SCRIPT${C_RESET}    ${C_GRAY}(Eliminar servicios y binarios del VPS)${C_RESET}"
+    echo -e " ${C_BOLD}${C_RED}[0]${C_RESET}  ${C_BOLD}► SALIR${C_RESET}"
     echo -e "${C_CYAN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
 }
 
@@ -805,33 +806,45 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit 1
 fi
 
+menu_banner() {
+    if [[ -x /usr/local/bin/ssh-banner ]]; then
+        /usr/local/bin/ssh-banner
+    elif [[ -f "${BASH_SOURCE[0]%/*}/ssh-banner" ]]; then
+        bash "${BASH_SOURCE[0]%/*}/ssh-banner"
+    else
+        echo -e "${C_RED}[ERROR] Gestor de banner no encontrado.${C_RESET}"
+        press_enter
+    fi
+}
+
 while true; do
     draw_dashboard
     main_opt=""
-    read -r -p " Ingrese una opción [0-9]: " main_opt || true
+    read -r -p " Ingrese una opción [0-10]: " main_opt || true
 
     case "${main_opt:-}" in
         1) menu_users ;;
         2) menu_monitor ;;
-        3) menu_limiter ;;
-        4) menu_ports ;;
-        5) menu_tools ;;
-        6)
+        3) menu_banner ;;
+        4) menu_limiter ;;
+        5) menu_ports ;;
+        6) menu_tools ;;
+        7)
             if [[ -x /usr/local/bin/ssh-domain ]]; then
                 /usr/local/bin/ssh-domain
             else
                 bash "${BASH_SOURCE[0]%/*}/ssh-domain" 2>/dev/null || true
             fi
             ;;
-        7)
+        8)
             if [[ -x /usr/local/bin/ssh-httpcustom ]]; then
                 /usr/local/bin/ssh-httpcustom
             else
                 bash "${BASH_SOURCE[0]%/*}/ssh-httpcustom" 2>/dev/null || true
             fi
             ;;
-        8) menu_update ;;
-        9) menu_uninstall ;;
+        9) menu_update ;;
+        10) menu_uninstall ;;
         0)
             clear
             echo -e "${C_CYAN}Gracias por utilizar ${C_BOLD}vps-ssh-limiter${C_RESET}${C_CYAN}. ¡Hasta pronto!${C_RESET}\n"

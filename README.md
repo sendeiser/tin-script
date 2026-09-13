@@ -56,23 +56,24 @@ sudo menu
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║        VPS-SSH-LIMITER :: PANEL DE CONTROL Y ADMINISTRACIÓN          ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
- S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.miservidor.com  IP: 198.51.100.24
+ S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.martinvps.online  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.7.3 - ACTUALIZADO]
+ Versión: [v1.8.0 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
 ══════════════════════════════════════════════════════════════════════════════
  [1] ► GESTIÓN DE USUARIOS    (Crear, Renovar, Modificar, Bloquear, Eliminar)
  [2] ► MONITOR DE CONEXIONES  (Tabla en vivo, Modo dinámico en tiempo real)
- [3] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
- [4] ► PROTOCOLOS Y PUERTOS   (Dropbear, WebSocket Proxy 80, Reiniciar SSH)
- [5] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
- [6] ► DOMINIOS Y HOSTS 100% GRATIS (Asistente Guiado, sslip.io, DuckDNS)
- [7] ► GUÍA & ASISTENTE HTTP CUSTOM (Asistente CDN, Payloads, Alternativas)
- [8] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
- [9] ► DESINSTALAR SCRIPT     (Eliminar servicios y binarios del VPS)
+ [3] ► BANNERS Y BIENVENIDA   (Mensajes en apps, plantillas, días y límites)
+ [4] ► DEMONIO LIMITADOR      (Estado, Reiniciar, Logs en vivo, Configuración)
+ [5] ► PROTOCOLOS Y PUERTOS   (Dropbear, WebSocket Proxy 80, Reiniciar SSH)
+ [6] ► OPTIMIZACIÓN Y SISTEMA (Limpiar RAM/Swap, Acelerador TCP BBR, Info)
+ [7] ► DOMINIOS Y HOSTS 100% GRATIS (Asistente Guiado, Cloudflare, DuckDNS)
+ [8] ► GUÍA & ASISTENTE HTTP CUSTOM (Asistente CDN, Payloads, Fronting)
+ [9] ► ACTUALIZAR SCRIPT      (Buscar e instalar actualizaciones desde GitHub)
+ [10] ► DESINSTALAR SCRIPT    (Eliminar servicios y binarios del VPS)
  [0] ► SALIR
 ══════════════════════════════════════════════════════════════════════════════
 ```
@@ -201,6 +202,41 @@ Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automát
 - **Activar Auto-Ping:** En el menú lateral de HTTP Custom, activa **Auto Ping** con un intervalo de **3 a 5 segundos** para mantener el socket SSH siempre activo.
 - **Batería sin restricciones:** En Android -> Ajustes -> Aplicaciones -> HTTP Custom -> Batería -> "Sin restricciones" para evitar que el sistema cierre la app en segundo plano.
 - **Respetar el límite simultáneo:** Si el cliente supera el límite asignado (por ejemplo, 2 conexiones), el demonio `ssh-limiter` cerrará de inmediato la conexión excedente más reciente.
+
+---
+
+## 🎨 Gestor de Banners y Mensajes de Bienvenida (Apps & SSH)
+
+El sistema incluye un módulo completo de **Banners y Mensajes Informativos** que se muestran automáticamente a tus usuarios al conectarse desde aplicaciones como **HTTP Custom, HTTP Injector, NapsternetV** o terminales SSH:
+
+### 1. Funcionalidades del Módulo de Banners:
+- **Banner Pre-Auth en Apps:** Se muestra en el registro (log) de conexión de HTTP Custom nada más pulsar *Connect*.
+- **Plantillas Estilizadas Prediseñadas:**
+  - `[1] ⚡ Neon Cyberpunk (Hacker Pro)`: Bordes dobles, etiquetas de estado y reglas anti-abuso.
+  - `[2] ★ VIP Gold Premium (Elegante)`: Enfoque comercial con estrellas doradas y canales de contacto.
+  - `[3] 🔹 Clean Minimalist`: Diseño compacto y de alta legibilidad.
+  - `[4] 🎮 Gaming & Low Latency`: Enfocado en optimización para juegos online y ping bajo.
+  - `[5] 📝 Editor Libre`: Editor manual para escribir tu propio diseño.
+- **Banner Dinámico de Sesión de Usuario (Login / MOTD):**
+  Calcula y muestra en tiempo real al conectarse el usuario:
+  - 👤 Nombre de usuario
+  - 📅 Fecha de expiración y **días restantes exactos**
+  - 📱 Cuota de conexiones activas (ej: `1 de 2 permitidos`)
+  - 🚀 Estado del servidor y soporte
+
+### 2. Comandos Rápidos:
+```bash
+# Abrir el menú interactivo de banners:
+banner
+# O también:
+ssh-banner
+
+# Previsualizar el banner actual:
+banner --preview
+
+# Activar plantilla rápidamente (1 a 4):
+banner --template 1
+```
 
 ---
 

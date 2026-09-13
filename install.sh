@@ -105,10 +105,11 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f /etc/systemd/system/ssh-limiter.service /etc/systemd/system/ssh-wsproxy.service
     systemctl daemon-reload 2>/dev/null || true
     
-    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom httpcustom custom ssh-domain domain dominio ssh-wsproxy wsproxy update menu tin vps; do
+    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner banner ssh-httpcustom httpcustom custom ssh-domain domain dominio ssh-wsproxy wsproxy update menu tin vps; do
         rm -f "/usr/local/bin/$b" "/usr/bin/$b"
     done
     rm -rf /etc/vps-ssh-limiter
+    rm -f /etc/profile.d/vps-ssh-banner.sh
     
     log_success "vps-ssh-limiter ha sido desinstalado correctamente del sistema."
     exit 0
@@ -200,7 +201,7 @@ log_success "Shells restringidas autorizadas para autenticación sin apertura de
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-httpcustom ssh-domain ssh-wsproxy menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -224,19 +225,20 @@ fi
 ln -sf /usr/local/bin/menu /usr/local/bin/tin
 ln -sf /usr/local/bin/menu /usr/local/bin/vps
 ln -sf /usr/local/bin/ssh-update /usr/local/bin/update
+ln -sf /usr/local/bin/ssh-banner /usr/local/bin/banner
 ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/httpcustom
 ln -sf /usr/local/bin/ssh-httpcustom /usr/local/bin/custom
 ln -sf /usr/local/bin/ssh-domain /usr/local/bin/domain
 ln -sf /usr/local/bin/ssh-domain /usr/local/bin/dominio
 ln -sf /usr/local/bin/ssh-wsproxy /usr/local/bin/wsproxy
 
-for bin_name in "${BIN_LIST[@]}" tin vps update httpcustom custom domain dominio wsproxy; do
+for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.7.3" > /etc/vps-ssh-limiter/version
+echo "1.8.0" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]]; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'
@@ -246,7 +248,12 @@ TARGET_PORT=143
 EOF
 fi
 
-log_success "Binarios y atajos ('menu', 'update', 'domain', 'httpcustom', 'wsproxy', 'tin', 'vps') vinculados."
+# Aplicar e inicializar banner predeterminado en OpenSSH y Dropbear
+if [[ -x /usr/local/bin/ssh-banner ]]; then
+    /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
+fi
+
+log_success "Binarios y atajos ('menu', 'update', 'banner', 'domain', 'httpcustom', 'wsproxy', 'tin', 'vps') vinculados."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación de Demonios Systemd (ssh-limiter & ssh-wsproxy)
@@ -351,6 +358,7 @@ echo -e "  ${C_CYAN}ssh-userlock <u|lock|unlock>${C_RESET}: Bloquear o desbloque
 echo -e "  ${C_CYAN}ssh-killuser <u|--all-exceeded>${C_RESET}: Desconectar sesiones activas"
 echo -e "  ${C_CYAN}ssh-userdel <usuario>${C_RESET}      : Revocar y eliminar usuario"
 echo -e "  ${C_CYAN}ssh-online${C_RESET}             : Monitor de conexiones en tiempo real (--json para APIs)"
+echo -e "  ${C_CYAN}ssh-banner${C_RESET}             : Gestor de banners de bienvenida y estado (atajo: banner)"
 echo -e "  ${C_CYAN}ssh-httpcustom [usuario]${C_RESET}: Generador de fichas y guía para HTTP Custom (atajos: httpcustom, custom)"
 echo -e "  ${C_CYAN}ssh-domain${C_RESET}               : Gestor de dominios Cloudflare/DuckDNS/Gratis (atajos: domain, dominio)"
 echo -e "  ${C_CYAN}ssh-wsproxy${C_RESET}              : WebSocket Proxy puerto 80 para HTTP Custom / CDN (atajo: wsproxy)"
