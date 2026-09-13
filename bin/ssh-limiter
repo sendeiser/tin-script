@@ -141,6 +141,83 @@ track_pid_traffic() {
     fi
 }
 
+declare -A USER_ACTIVE_PIDS=()
+
+load_all_user_connections() {
+    USER_ACTIVE_PIDS=()
+
+    # 1. PIDs por UID de usuario
+    while IFS=: read -r u _ uid _ _ _ _; do
+        [[ $uid -lt 1000 || "$u" == "nobody" || "$u" == "nogroup" ]] && continue
+        USER_ACTIVE_PIDS["$u"]=""
+        for p in $(pgrep -u "$u" 2>/dev/null || true); do
+            [[ -z "$p" || ! "$p" =~ ^[0-9]+$ || ! -d "/proc/$p" ]] && continue
+            USER_ACTIVE_PIDS["$u"]="${USER_ACTIVE_PIDS["$u"]:-} $p"
+        done
+    done < "$PASSWD_FILE"
+
+    # 2. Conexiones Dropbear en modo túnel/port-forwarding (corren como root)
+    local db_active=()
+    for p in $(pgrep -x dropbear 2>/dev/null || true); do
+        [[ -n "$p" && -d "/proc/$p" ]] && db_active+=("$p")
+    done
+
+    if [[ ${#db_active[@]} -gt 0 ]]; then
+        local logs=""
+        if command -v journalctl >/dev/null 2>&1; then
+            logs=$(journalctl -u dropbear -n 500 --no-pager 2>/dev/null || true)
+        fi
+        if [[ -f /var/log/auth.log ]]; then
+            local al
+            al=$(tail -n 500 /var/log/auth.log 2>/dev/null | grep -i "dropbear" || true)
+            logs="${logs}"$'\n'"${al}"
+        fi
+
+        while read -r line; do
+            if [[ "$line" =~ dropbear\[([0-9]+)\]:.*auth\ succeeded\ for\ \'([^\']+)\' ]]; then
+                local pid="${BASH_REMATCH[1]}"
+                local user="${BASH_REMATCH[2]}"
+                if [[ -d "/proc/$pid" ]]; then
+                    local comm=""
+                    [[ -r "/proc/$pid/comm" ]] && comm=$(cat "/proc/$pid/comm" 2>/dev/null || true)
+                    if [[ "$comm" == *"dropbear"* ]]; then
+                        local cur="${USER_ACTIVE_PIDS["$user"]:-}"
+                        if [[ ! " $cur " =~ " $pid " ]]; then
+                            USER_ACTIVE_PIDS["$user"]="${cur} $pid"
+                        fi
+                    fi
+                fi
+            fi
+        done <<< "$logs"
+    fi
+
+    # 3. Conexiones OpenSSH (sshd) registradas en auth logs
+    local ssh_logs=""
+    if command -v journalctl >/dev/null 2>&1; then
+        ssh_logs=$(journalctl -u ssh -u sshd -n 500 --no-pager 2>/dev/null || true)
+    fi
+    if [[ -f /var/log/auth.log ]]; then
+        local sal
+        sal=$(tail -n 500 /var/log/auth.log 2>/dev/null | grep -i "sshd" || true)
+        ssh_logs="${ssh_logs}"$'\n'"${sal}"
+    fi
+
+    if [[ -n "$ssh_logs" ]]; then
+        while read -r sline; do
+            if [[ "$sline" =~ sshd\[([0-9]+)\]:.*Accepted\ (password|publickey)\ for\ ([^\ ]+) ]]; then
+                local spid="${BASH_REMATCH[1]}"
+                local suser="${BASH_REMATCH[3]}"
+                if [[ -d "/proc/$spid" ]]; then
+                    local cur="${USER_ACTIVE_PIDS["$suser"]:-}"
+                    if [[ ! " $cur " =~ " $spid " ]]; then
+                        USER_ACTIVE_PIDS["$suser"]="${cur} $spid"
+                    fi
+                fi
+            fi
+        done <<< "$ssh_logs"
+    fi
+}
+
 # ------------------------------------------------------------------------------
 # Ciclo Principal de Inspección (Bajo impacto de CPU < 1%)
 # ------------------------------------------------------------------------------
@@ -152,6 +229,9 @@ while $RUNNING; do
         sleep "$CHECK_INTERVAL"
         continue
     fi
+
+    # Cargar mapa de conexiones universal
+    load_all_user_connections
 
     # Leer usuarios administrados con cuota LIM:<N> o UID >= 1000
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -177,10 +257,10 @@ while $RUNNING; do
         if [[ -n "$limit" ]]; then
             username="$u"
 
-            # Inspección universal de todos los procesos activos bajo el UID del usuario
+            # Inspección universal de todos los procesos activos (Dropbear + OpenSSH)
             all_pids=()
-            for p in $(pgrep -u "$username" 2>/dev/null || true); do
-                if [[ -n "$p" && "$p" =~ ^[0-9]+$ ]]; then
+            for p in ${USER_ACTIVE_PIDS["$username"]:-}; do
+                if [[ -n "$p" && "$p" =~ ^[0-9]+$ && -d "/proc/$p" ]]; then
                     all_pids+=("$p")
                     track_pid_traffic "$username" "$p"
                 fi

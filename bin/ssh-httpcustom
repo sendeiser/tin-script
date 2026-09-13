@@ -147,9 +147,9 @@ show_client_card() {
     else
         echo -e "🌐 *Host / IP:* \`${ip}\`"
     fi
-    echo -e "🚪 *Puertos Dropbear:* \`${drop_ports}\` (Recomendados)"
+    echo -e "🚪 *Puerto SSH (Banner Personal):* \`22\` (Recomendado)"
     echo -e "🚪 *Puerto WebSocket Proxy:* \`80\` (Para Payloads / CDN Cloudflare)"
-    echo -e "🚪 *Puerto OpenSSH:* \`22\`"
+    echo -e "🚪 *Puertos Dropbear:* \`${drop_ports}\`"
     echo -e "👤 *Usuario:* \`${user}\`"
     echo -e "🔑 *Contraseña:* \`${pass}\`"
     echo -e "📅 *Vencimiento:* \`${exp_date}\` (${days_left} restantes)"
@@ -157,7 +157,9 @@ show_client_card() {
     echo -e "📱 *Límite de Conexiones:* \`${limit_conn} dispositivo(s)\`"
     echo -e "📞 *Contacto / Soporte:* \`3826432180\`"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "⚡ *Formato Rápido de Importación en HTTP Custom:*"
+    echo -e "⚡ *Formato Rápido (Con Banner Personal en Registro):*"
+    echo -e "\`${host_conn}:22@${user}:${pass}\`"
+    echo -e "⚡ *Formato Alternativo (Dropbear):*"
     echo -e "\`${host_conn}:143@${user}:${pass}\`"
     echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 }

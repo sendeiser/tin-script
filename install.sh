@@ -355,6 +355,11 @@ EOF
     chmod 644 "$WS_SERVICE_DST"
 fi
 
+# Aplicar banners del sistema y OpenSSH
+if [[ -x /usr/local/bin/ssh-banner ]]; then
+    /usr/local/bin/ssh-banner --apply 2>/dev/null || true
+fi
+
 # Recargar y arrancar servicios
 systemctl daemon-reload
 systemctl enable ssh-limiter.service --now 2>/dev/null || true

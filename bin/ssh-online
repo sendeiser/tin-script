@@ -78,6 +78,105 @@ format_bytes() {
     fi
 }
 
+# ------------------------------------------------------------------------------
+# Mapeo Universal de Conexiones en Vivo (Dropbear + OpenSSH)
+# ------------------------------------------------------------------------------
+declare -A USER_SSH_COUNT=()
+declare -A USER_DROPBEAR_COUNT=()
+declare -A USER_ACTIVE_PIDS=()
+
+load_all_user_connections() {
+    USER_SSH_COUNT=()
+    USER_DROPBEAR_COUNT=()
+    USER_ACTIVE_PIDS=()
+
+    # 1. Procesos que corren bajo el UID del usuario (sesiones interactivas o túneles con setuid)
+    for entry in "${USERS_LIST[@]}"; do
+        local u="${entry%%:*}"
+        USER_SSH_COUNT["$u"]=0
+        USER_DROPBEAR_COUNT["$u"]=0
+        USER_ACTIVE_PIDS["$u"]=""
+
+        local pids
+        pids=$(pgrep -u "$u" 2>/dev/null || true)
+        for p in $pids; do
+            [[ -z "$p" || ! "$p" =~ ^[0-9]+$ || ! -d "/proc/$p" ]] && continue
+            local comm=""
+            [[ -r "/proc/$p/comm" ]] && comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
+            if [[ "$comm" == *"dropbear"* ]]; then
+                USER_DROPBEAR_COUNT["$u"]=$(( ${USER_DROPBEAR_COUNT["$u"]:-0} + 1 ))
+            else
+                USER_SSH_COUNT["$u"]=$(( ${USER_SSH_COUNT["$u"]:-0} + 1 ))
+            fi
+            USER_ACTIVE_PIDS["$u"]="${USER_ACTIVE_PIDS["$u"]:-} $p"
+        done
+    done
+
+    # 2. Conexiones Dropbear en modo túnel/port-forwarding (corren como root)
+    local db_active=()
+    for p in $(pgrep -x dropbear 2>/dev/null || true); do
+        [[ -n "$p" && -d "/proc/$p" ]] && db_active+=("$p")
+    done
+
+    if [[ ${#db_active[@]} -gt 0 ]]; then
+        local logs=""
+        if command -v journalctl >/dev/null 2>&1; then
+            logs=$(journalctl -u dropbear -n 1000 --no-pager 2>/dev/null || true)
+        fi
+        if [[ -f /var/log/auth.log ]]; then
+            local al
+            al=$(tail -n 1000 /var/log/auth.log 2>/dev/null | grep -i "dropbear" || true)
+            logs="${logs}"$'\n'"${al}"
+        fi
+
+        # Parsear: dropbear[12345]: Password auth succeeded for 'carlos'
+        while read -r line; do
+            if [[ "$line" =~ dropbear\[([0-9]+)\]:.*auth\ succeeded\ for\ \'([^\']+)\' ]]; then
+                local pid="${BASH_REMATCH[1]}"
+                local user="${BASH_REMATCH[2]}"
+                if [[ -d "/proc/$pid" ]]; then
+                    local comm=""
+                    [[ -r "/proc/$pid/comm" ]] && comm=$(cat "/proc/$pid/comm" 2>/dev/null || true)
+                    if [[ "$comm" == *"dropbear"* ]]; then
+                        local cur="${USER_ACTIVE_PIDS["$user"]:-}"
+                        if [[ ! " $cur " =~ " $pid " ]]; then
+                            USER_DROPBEAR_COUNT["$user"]=$(( ${USER_DROPBEAR_COUNT["$user"]:-0} + 1 ))
+                            USER_ACTIVE_PIDS["$user"]="${cur} $pid"
+                        fi
+                    fi
+                fi
+            fi
+        done <<< "$logs"
+    fi
+
+    # 3. Conexiones OpenSSH (sshd) registradas en auth logs
+    local ssh_logs=""
+    if command -v journalctl >/dev/null 2>&1; then
+        ssh_logs=$(journalctl -u ssh -u sshd -n 1000 --no-pager 2>/dev/null || true)
+    fi
+    if [[ -f /var/log/auth.log ]]; then
+        local sal
+        sal=$(tail -n 1000 /var/log/auth.log 2>/dev/null | grep -i "sshd" || true)
+        ssh_logs="${ssh_logs}"$'\n'"${sal}"
+    fi
+
+    if [[ -n "$ssh_logs" ]]; then
+        while read -r sline; do
+            if [[ "$sline" =~ sshd\[([0-9]+)\]:.*Accepted\ (password|publickey)\ for\ ([^\ ]+) ]]; then
+                local spid="${BASH_REMATCH[1]}"
+                local suser="${BASH_REMATCH[3]}"
+                if [[ -d "/proc/$spid" ]]; then
+                    local cur="${USER_ACTIVE_PIDS["$suser"]:-}"
+                    if [[ ! " $cur " =~ " $spid " ]]; then
+                        USER_SSH_COUNT["$suser"]=$(( ${USER_SSH_COUNT["$suser"]:-0} + 1 ))
+                        USER_ACTIVE_PIDS["$suser"]="${cur} $spid"
+                    fi
+                fi
+            fi
+        done <<< "$ssh_logs"
+    fi
+}
+
 get_user_traffic_bytes() {
     local user="$1"
     local db_file="/etc/vps-ssh-limiter/traffic.db"
@@ -91,22 +190,21 @@ get_user_traffic_bytes() {
         fi
     fi
 
-    # Sumar consumo no consolidado de procesos activos
-    for p in $(pgrep -u "$user" 2>/dev/null || true); do
-        [[ -z "$p" || ! "$p" =~ ^[0-9]+$ ]] && continue
-        if [[ -r "/proc/$p/io" ]]; then
-            local r_b w_b cur_total last_seen=0
-            r_b=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
-            w_b=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
-            cur_total=$(( r_b + w_b ))
+    # Sumar consumo en vivo de todos los procesos activos del usuario
+    local pids="${USER_ACTIVE_PIDS["$user"]:-}"
+    for p in $pids; do
+        [[ -z "$p" || ! "$p" =~ ^[0-9]+$ || ! -r "/proc/$p/io" ]] && continue
+        local r_b w_b cur_total last_seen=0
+        r_b=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+        w_b=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+        cur_total=$(( r_b + w_b ))
 
-            local p_file="/run/vps-ssh-limiter/pids/${p}"
-            if [[ -f "$p_file" ]]; then
-                last_seen=$(cat "$p_file" 2>/dev/null || echo 0)
-            fi
-            if [[ $cur_total -gt $last_seen ]]; then
-                total_bytes=$(( total_bytes + (cur_total - last_seen) ))
-            fi
+        local p_file="/run/vps-ssh-limiter/pids/${p}"
+        if [[ -f "$p_file" ]]; then
+            last_seen=$(cat "$p_file" 2>/dev/null || echo 0)
+        fi
+        if [[ $cur_total -gt $last_seen ]]; then
+            total_bytes=$(( total_bytes + (cur_total - last_seen) ))
         fi
     done
 
@@ -126,28 +224,11 @@ get_server_total_traffic_bytes() {
     echo $(( rx + tx ))
 }
 
-# ------------------------------------------------------------------------------
-# Función para contar procesos activos por usuario
-# ------------------------------------------------------------------------------
 count_user_connections() {
     local user="$1"
-    local ssh_count=0
-    local dropbear_count=0
-
-    for p in $(pgrep -u "$user" 2>/dev/null || true); do
-        [[ -z "$p" || ! "$p" =~ ^[0-9]+$ ]] && continue
-        local comm=""
-        if [[ -r "/proc/$p/comm" ]]; then
-            comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
-        fi
-        if [[ "$comm" == *"dropbear"* ]]; then
-            dropbear_count=$((dropbear_count + 1))
-        else
-            ssh_count=$((ssh_count + 1))
-        fi
-    done
-
-    echo "$ssh_count $dropbear_count"
+    local s_cnt="${USER_SSH_COUNT["$user"]:-0}"
+    local d_cnt="${USER_DROPBEAR_COUNT["$user"]:-0}"
+    echo "$s_cnt $d_cnt"
 }
 
 # ------------------------------------------------------------------------------
@@ -215,6 +296,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$PASSWD_FILE"
 
 TOTAL_MANAGED=${#USERS_LIST[@]}
+load_all_user_connections
 
 # ------------------------------------------------------------------------------
 # Salida en Formato JSON

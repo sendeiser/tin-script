@@ -100,9 +100,6 @@ get_system_user_info() {
         target="$req_user"
     elif [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]] && id "${BANNER_USER}" >/dev/null 2>&1; then
         target="${BANNER_USER}"
-    else
-        # Auto-detectar: buscar primer usuario no-root en /etc/passwd con UID >= 1000
-        target=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1; exit}' /etc/passwd 2>/dev/null || true)
     fi
 
     if [[ -n "$target" ]]; then
@@ -355,7 +352,7 @@ apply_banner_system() {
             match_blocks+="# BEGIN VPS-SSH-LIMITER USER BANNERS\n"
             while IFS=: read -r u _ uid _ _ _ _; do
                 if [[ $uid -ge 1000 && "$u" != "nobody" && -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
-                    match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n"
+                    match_blocks+="Match User ${u}\n    Banner ${CONFIG_DIR}/banners/${u}.net\n    PasswordAuthentication yes\n    AllowTcpForwarding yes\n"
                 fi
             done < /etc/passwd
             match_blocks+="# END VPS-SSH-LIMITER USER BANNERS\n"

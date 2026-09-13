@@ -140,6 +140,9 @@ if [[ $count_before -eq 0 ]]; then
 fi
 
 echo -e "${C_CYAN}Cerrando $count_before conexión(es) activa(s) para '$USERNAME'...${C_RESET}"
+for p in "${all_pids[@]}"; do
+    kill -9 "$p" 2>/dev/null || true
+done
 pkill -u "$USERNAME" -9 2>/dev/null || true
 
 echo -e "${C_GREEN}✔ Todas las conexiones del usuario '$USERNAME' fueron cerradas exitosamente.${C_RESET}"

@@ -192,16 +192,18 @@ if [[ -n "$SERVER_HOST" ]]; then
 else
     echo -e "🌐 *Host / IP:* \`${SERVER_IP}\`"
 fi
-echo -e "🚪 *Puertos Dropbear:* \`${DROP_PORTS}\`"
+echo -e "🚪 *Puerto SSH (Banner Personal):* \`22\` (Recomendado)"
 echo -e "🚪 *Puerto WS Proxy (Payload):* \`80\`"
-echo -e "🚪 *Puerto OpenSSH:* \`22\`"
+echo -e "🚪 *Puertos Dropbear:* \`${DROP_PORTS}\`"
 echo -e "👤 *Usuario:* \`${USERNAME}\`"
 echo -e "🔑 *Contraseña:* \`${PASSWORD}\`"
 echo -e "📅 *Vencimiento:* \`${EXPIRY_DATE}\` (${DAYS} días)"
 echo -e "📱 *Límite:* \`${LIMIT} conexión(es)\`"
 echo -e "📞 *Contacto:* \`3826432180\`"
 echo -e ""
-echo -e "⚡ *Formato Rápido (HTTP Custom):*"
+echo -e "⚡ *Formato Rápido (Con Banner Personal en Registro):*"
+echo -e "${C_YELLOW}${CONNECT_HOST}:22@${USERNAME}:${PASSWORD}${C_RESET}"
+echo -e "⚡ *Formato Rápido Alternativo (Dropbear):*"
 echo -e "${C_YELLOW}${CONNECT_HOST}:143@${USERNAME}:${PASSWORD}${C_RESET}"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
