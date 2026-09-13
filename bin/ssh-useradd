@@ -205,4 +205,11 @@ echo -e "⚡ *Formato Rápido (HTTP Custom):*"
 echo -e "${C_YELLOW}${CONNECT_HOST}:143@${USERNAME}:${PASSWORD}${C_RESET}"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
+# Actualizar banners del sistema con los datos del nuevo usuario
+if command -v /usr/local/bin/ssh-banner >/dev/null 2>&1; then
+    /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
+elif [[ -x "/etc/vps-ssh-limiter/bin/ssh-banner" ]]; then
+    /etc/vps-ssh-limiter/bin/ssh-banner --apply >/dev/null 2>&1 || true
+fi
+
 exit 0

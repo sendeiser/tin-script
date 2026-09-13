@@ -172,4 +172,11 @@ echo -e "  ● Usuario     : ${C_BOLD}${USERNAME}${C_RESET}"
 echo -e "  ● Contacto    : ${C_WHITE}3826432180${C_RESET}"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
+# Actualizar banners del sistema con los nuevos datos
+if command -v /usr/local/bin/ssh-banner >/dev/null 2>&1; then
+    /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
+elif [[ -x "/etc/vps-ssh-limiter/bin/ssh-banner" ]]; then
+    /etc/vps-ssh-limiter/bin/ssh-banner --apply >/dev/null 2>&1 || true
+fi
+
 exit 0

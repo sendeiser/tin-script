@@ -2,8 +2,8 @@
 # ==============================================================================
 # vps-ssh-limiter: bin/ssh-banner
 # Gestor interactivo y automatizado de Banners de Bienvenida para SSH / Dropbear
-# y HTTP Custom / Apps VPN. Soporta plantillas visuales, previsualización,
-# configuración de OpenSSH/Dropbear y banner dinámico con días y límites.
+# y HTTP Custom / Apps VPN. Soporta plantillas visuales en HTML, variables del sistema
+# (usuario, vencimiento, datos usados), previsualización y multiusuario.
 # ==============================================================================
 set -euo pipefail
 
@@ -52,6 +52,7 @@ load_banner_conf() {
     CUSTOM_RULES="Prohibido Torrent, SPAM, DDoS y Multi-Login no autorizado"
     DYNAMIC_LOGIN_BANNER="true"
     TEMPLATE_ID="1"
+    BANNER_USER="auto"
 
     if [[ -f "$BANNER_CONF" ]]; then
         # shellcheck disable=SC1090
@@ -61,6 +62,9 @@ load_banner_conf() {
     # Auto-migrar cualquier valor previo que contenga mención a Telegram o esté vacío
     if [[ "${CONTACT_INFO:-}" == *"Telegram"* || "${CONTACT_INFO:-}" == *"@Soporte"* || -z "${CONTACT_INFO:-}" ]]; then
         CONTACT_INFO="3826432180"
+    fi
+    if [[ -z "${BANNER_USER:-}" ]]; then
+        BANNER_USER="auto"
     fi
 }
 
@@ -73,8 +77,100 @@ CONTACT_INFO="${CONTACT_INFO}"
 CUSTOM_RULES="${CUSTOM_RULES}"
 DYNAMIC_LOGIN_BANNER="${DYNAMIC_LOGIN_BANNER}"
 TEMPLATE_ID="${TEMPLATE_ID}"
+BANNER_USER="${BANNER_USER}"
 EOF
     chmod 644 "$BANNER_CONF"
+}
+
+# ------------------------------------------------------------------------------
+# Obtener Variables del Usuario desde el Sistema (chage, passwd, traffic.db, proc)
+# ------------------------------------------------------------------------------
+get_system_user_info() {
+    local req_user="${1:-}"
+
+    U_NAME="cliente_ssh"
+    U_EXP="Sin exp."
+    U_DAYS="Ilimitado"
+    U_TRAFFIC="0 B"
+    U_LIMIT="1"
+    U_CONNS="1"
+
+    local target=""
+    if [[ -n "$req_user" && "$req_user" != "auto" ]] && id "$req_user" >/dev/null 2>&1; then
+        target="$req_user"
+    elif [[ -n "${BANNER_USER:-}" && "${BANNER_USER}" != "auto" ]] && id "${BANNER_USER}" >/dev/null 2>&1; then
+        target="${BANNER_USER}"
+    else
+        # Auto-detectar: buscar primer usuario no-root en /etc/passwd con UID >= 1000
+        target=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1; exit}' /etc/passwd 2>/dev/null || true)
+    fi
+
+    if [[ -n "$target" ]]; then
+        U_NAME="$target"
+
+        # 1. Fecha de vencimiento y días restantes desde chage
+        if command -v chage >/dev/null 2>&1; then
+            local raw_exp
+            raw_exp=$(chage -l "$target" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
+            if [[ -n "$raw_exp" && "$raw_exp" != "never" && "$raw_exp" != "nunca" ]]; then
+                local exp_epoch now_epoch
+                exp_epoch=$(date -d "$raw_exp" +%s 2>/dev/null || true)
+                now_epoch=$(date +%s)
+                if [[ -n "$exp_epoch" ]]; then
+                    U_EXP=$(date -d "@$exp_epoch" +%d/%m/%Y 2>/dev/null || echo "$raw_exp")
+                    local diff=$(( (exp_epoch - now_epoch) / 86400 ))
+                    if [[ $diff -ge 0 ]]; then
+                        U_DAYS="${diff} día(s)"
+                    else
+                        U_DAYS="EXPIRADO"
+                    fi
+                fi
+            fi
+        fi
+
+        # 2. Límite de conexiones desde GECOS en /etc/passwd
+        local gecos_line
+        gecos_line=$(grep "^${target}:" /etc/passwd 2>/dev/null || true)
+        if [[ "$gecos_line" =~ LIM[:_=-]?([0-9]+) ]]; then
+            U_LIMIT="${BASH_REMATCH[1]}"
+        fi
+
+        # 3. Conexiones activas en tiempo real
+        local s_pids d_pids
+        s_pids=$(pgrep -u "$target" -f "^sshd: $target@" 2>/dev/null | wc -w || echo 0)
+        d_pids=$(pgrep -u "$target" -x "dropbear" 2>/dev/null | wc -w || echo 0)
+        U_CONNS=$(( s_pids + d_pids ))
+
+        # 4. Consumo de datos usado por el usuario (traffic.db + procesos vivos)
+        local u_bytes=0
+        if [[ -f /etc/vps-ssh-limiter/traffic.db ]]; then
+            local t_line
+            t_line=$(grep "^${target}:" /etc/vps-ssh-limiter/traffic.db 2>/dev/null | head -n1 || true)
+            if [[ -n "$t_line" ]]; then
+                u_bytes=$(echo "$t_line" | cut -d: -f2 || echo 0)
+            fi
+        fi
+        local pids
+        pids=$(pgrep -u "$target" 2>/dev/null || true)
+        for p in $pids; do
+            if [[ -r "/proc/$p/io" ]]; then
+                local rb wb
+                rb=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+                wb=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
+                u_bytes=$(( u_bytes + rb + wb ))
+            fi
+        done
+
+        if [[ $u_bytes -ge 1073741824 ]]; then
+            U_TRAFFIC=$(awk -v b="$u_bytes" 'BEGIN { printf "%.2f GB", b / 1073741824 }')
+        elif [[ $u_bytes -ge 1048576 ]]; then
+            U_TRAFFIC=$(awk -v b="$u_bytes" 'BEGIN { printf "%.2f MB", b / 1048576 }')
+        elif [[ $u_bytes -ge 1024 ]]; then
+            U_TRAFFIC=$(awk -v b="$u_bytes" 'BEGIN { printf "%.1f KB", b / 1024 }')
+        elif [[ $u_bytes -gt 0 ]]; then
+            U_TRAFFIC="${u_bytes} B"
+        fi
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -85,25 +181,16 @@ generate_banner_text() {
     local s_name="${2:-$SERVER_NAME}"
     local c_info="${3:-$CONTACT_INFO}"
     local rules="${4:-$CUSTOM_RULES}"
+    local target_u="${5:-${BANNER_USER:-auto}}"
     local now_date
     now_date=$(date '+%d/%m/%Y %H:%M')
 
-    local rx=0 tx=0
-    if [[ -r /proc/net/dev ]]; then
-        while read -r iface rx_b _ _ _ _ _ _ _ tx_b _; do
-            if [[ "$iface" != "lo:" && "$iface" =~ :$ ]]; then
-                rx=$(( rx + rx_b ))
-                tx=$(( tx + tx_b ))
-            fi
-        done < /proc/net/dev
-    fi
-    local total_b=$(( rx + tx ))
-    local traffic_disp="0 MB"
-    if [[ $total_b -ge 1073741824 ]]; then
-        traffic_disp=$(awk -v b="$total_b" 'BEGIN { printf "%.2f GB", b / 1073741824 }')
-    elif [[ $total_b -ge 1048576 ]]; then
-        traffic_disp=$(awk -v b="$total_b" 'BEGIN { printf "%.2f MB", b / 1048576 }')
-    fi
+    get_system_user_info "$target_u"
+    local u_name="$U_NAME"
+    local u_exp="$U_EXP"
+    local u_days="$U_DAYS"
+    local u_traffic="$U_TRAFFIC"
+    local u_limit="$U_LIMIT"
 
     case "$t_id" in
         1)
@@ -112,11 +199,13 @@ generate_banner_text() {
 <center><font color="#00E5FF"><b>╔═══════════════════════════════════╗</b></font><br>
 <font color="#FFD700"><b>★ INFORMACIÓN DE TU CUENTA ★</b></font><br>
 <font color="#00E5FF"><b>╚═══════════════════════════════════╝</b></font></center><br>
+<font color="#39FF14">● <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
+<font color="#39FF14">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00E5FF">(${u_days})</font><br>
+<font color="#39FF14">● <b>Datos Usados:</b></font> <font color="#FF00FF"><b>${u_traffic}</b></font><br>
+<font color="#39FF14">● <b>Dispositivos:</b></font> <font color="#00E5FF">${u_limit} permitido(s)</font><br>
 <font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} (Alta Velocidad)</font><br>
 <font color="#39FF14">● <b>Estado:</b></font> <font color="#39FF14"><b>ACTIVO Y OPTIMIZADO</b></font><br>
 <font color="#39FF14">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#39FF14">● <b>Tráfico VPS:</b></font> <font color="#FF00FF"><b>${traffic_disp} Transferidos</b></font><br>
-<font color="#39FF14">● <b>Conexiones:</b></font> <font color="#00E5FF">1 a 2 Dispositivos</font><br>
 <font color="#39FF14">● <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
 <font color="#888888">─────────────────────────────────────</font><br>
 <center><font color="#FF3366">⚠️ <b>Prohibido Torrent, SPAM y Multi-Login</b></font><br>
@@ -128,10 +217,13 @@ EOF
             cat <<EOF
 <center><font color="#FFD700"><b>★ ★ ★ ${s_name} VIP NETWORK ★ ★ ★</b></font><br>
 <font color="#FFA500"><b>─────────────────────────────────────</b></font></center><br>
+<font color="#FFD700">● <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
+<font color="#FFD700">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#FFA500">(${u_days})</font><br>
+<font color="#FFD700">● <b>Datos Usados:</b></font> <font color="#39FF14"><b>${u_traffic}</b></font><br>
+<font color="#FFD700">● <b>Dispositivos:</b></font> <font color="#FFA500">${u_limit} permitido(s)</font><br>
 <font color="#FFD700">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} VIP</font><br>
 <font color="#FFD700">● <b>Estado:</b></font> <font color="#39FF14"><b>CONECTADO / VIP ULTRA</b></font><br>
 <font color="#FFD700">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#FFD700">● <b>Tráfico VPS:</b></font> <font color="#39FF14"><b>${traffic_disp}</b></font><br>
 <font color="#FFD700">● <b>Contacto:</b></font> <font color="#00E5FF"><b>${c_info}</b></font><br>
 <font color="#FFA500">─────────────────────────────────────</font><br>
 <center><font color="#FF4444">⚠️ <b>Prohibido Descargas Torrent y Abusos</b></font><br>
@@ -143,9 +235,12 @@ EOF
             cat <<EOF
 <center><font color="#39FF14"><b>🎮 ${s_name} GAMING LOW-PING PRO 🎮</b></font><br>
 <font color="#00FFCC"><b>─────────────────────────────────────</b></font></center><br>
-<font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} Low-Latency</font><br>
-<font color="#39FF14">● <b>Perfil:</b></font> <font color="#00E5FF">Free Fire / PUBG / COD / Streaming</font><br>
+<font color="#39FF14">● <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
+<font color="#39FF14">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00FFCC">(${u_days})</font><br>
+<font color="#39FF14">● <b>Datos Usados:</b></font> <font color="#00FFCC"><b>${u_traffic}</b></font><br>
 <font color="#39FF14">● <b>TCP BBR:</b></font> <font color="#39FF14"><b>ACTIVO (Anti-Lag)</b></font><br>
+<font color="#39FF14">● <b>Dispositivos:</b></font> <font color="#00E5FF">${u_limit} permitido(s)</font><br>
+<font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${s_name} Gaming</font><br>
 <font color="#39FF14">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
 <font color="#39FF14">● <b>Contacto:</b></font> <font color="#FFD700"><b>${c_info}</b></font><br>
 <font color="#00FFCC">─────────────────────────────────────</font><br>
@@ -158,10 +253,12 @@ EOF
             cat <<EOF
 <center><font color="#FF007F"><b>⚡ ${s_name} CYBERPUNK HIGH SPEED ⚡</b></font><br>
 <font color="#00F0FF"><b>═════════════════════════════════════</b></font></center><br>
+<font color="#00F0FF">► <b>Usuario:</b></font> <font color="#FFFFFF">${u_name}</font><br>
+<font color="#00F0FF">► <b>Vencimiento:</b></font> <font color="#39FF14"><b>${u_exp}</b></font> <font color="#00F0FF">(${u_days})</font><br>
+<font color="#00F0FF">► <b>Datos:</b></font> <font color="#FF007F"><b>${u_traffic}</b></font><br>
+<font color="#00F0FF">► <b>Dispositivos:</b></font> <font color="#FFFF00">${u_limit} permitido(s)</font><br>
 <font color="#00F0FF">► <b>Host:</b></font> <font color="#FFFFFF">${s_name}</font><br>
-<font color="#00F0FF">► <b>Protocolo:</b></font> <font color="#39FF14">SSH WebSocket (Puerto 80)</font><br>
 <font color="#00F0FF">► <b>Hora:</b></font> <font color="#FFFFFF">${now_date}</font><br>
-<font color="#00F0FF">► <b>Datos:</b></font> <font color="#FF007F"><b>${traffic_disp} Transferidos</b></font><br>
 <font color="#00F0FF">► <b>Contacto:</b></font> <font color="#FFFF00"><b>${c_info}</b></font><br>
 <font color="#00F0FF">═════════════════════════════════════</font><br>
 <center><font color="#FF0055">⛔ <b>No Torrent | No Spam | No DDoS</b></font><br>
@@ -174,11 +271,14 @@ EOF
 ╔═══════════════════════════════════════╗
 ║     ★ INFORMACIÓN DE TU CUENTA ★      ║
 ╚═══════════════════════════════════════╝
-  ● Servidor     : ${s_name} (SSH / WS)
-  ● Estado       : ACTIVO Y OPTIMIZADO
-  ● Fecha / Hora : ${now_date}
-  ● Tráfico VPS  : ${traffic_disp}
-  ● Contacto     : ${c_info}
+  ● Usuario     : ${u_name}
+  ● Vencimiento : ${u_exp} (${u_days})
+  ● Datos Usados: ${u_traffic}
+  ● Dispositivos: ${u_limit} permitido(s)
+  ● Servidor    : ${s_name} (SSH / WS)
+  ● Estado      : ACTIVO Y OPTIMIZADO
+  ● Fecha / Hora: ${now_date}
+  ● Contacto    : ${c_info}
 ─────────────────────────────────────────
  ⚠️ Prohibido Torrent, Spam y Multi-Login
 ═════════════════════════════════════════
@@ -188,7 +288,7 @@ EOF
             if [[ -f "$BANNER_FILE" ]]; then
                 cat "$BANNER_FILE"
             else
-                generate_banner_text 1 "$s_name" "$c_info" "$rules"
+                generate_banner_text 1 "$s_name" "$c_info" "$rules" "$target_u"
             fi
             ;;
     esac
@@ -201,19 +301,29 @@ apply_banner_system() {
     load_banner_conf
 
     mkdir -p "$CONFIG_DIR"
+    mkdir -p "${CONFIG_DIR}/banners"
     mkdir -p "/etc/dropbear"
 
     if [[ "$BANNER_ENABLED" == "true" ]]; then
         if [[ "$TEMPLATE_ID" != "5" || ! -f "$BANNER_FILE" || ! -s "$BANNER_FILE" ]]; then
-            generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" > "$BANNER_FILE"
+            generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "${BANNER_USER:-auto}" > "$BANNER_FILE"
         fi
         cp -f "$BANNER_FILE" "$ISSUE_FILE" 2>/dev/null || true
         cp -f "$BANNER_FILE" "/etc/dropbear/banner" 2>/dev/null || true
         chmod 644 "$BANNER_FILE" "$ISSUE_FILE" "/etc/dropbear/banner" 2>/dev/null || true
+
+        # Generar banners específicos por cada usuario en /etc/vps-ssh-limiter/banners/<user>.net
+        while IFS=: read -r u _ uid _ _ _ _; do
+            if [[ $uid -ge 1000 && "$u" != "nobody" ]]; then
+                generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "$u" > "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+                chmod 644 "${CONFIG_DIR}/banners/${u}.net" 2>/dev/null || true
+            fi
+        done < /etc/passwd
     else
         echo -n "" > "$BANNER_FILE"
         echo -n "" > "$ISSUE_FILE"
         rm -f "/etc/dropbear/banner" 2>/dev/null || true
+        rm -rf "${CONFIG_DIR}/banners" 2>/dev/null || true
     fi
 
     # Configurar OpenSSH
@@ -356,7 +466,7 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
-# Previsualización del Banner
+# Previsualización del Banner en Terminal (Simulación de HTML con ANSI)
 # ------------------------------------------------------------------------------
 render_simulated_html() {
     local text="$1"
@@ -398,11 +508,7 @@ preview_banner() {
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     local raw_banner=""
-    if [[ -f "$BANNER_FILE" && -s "$BANNER_FILE" ]]; then
-        raw_banner=$(cat "$BANNER_FILE")
-    else
-        raw_banner=$(generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES")
-    fi
+    raw_banner=$(generate_banner_text "$TEMPLATE_ID" "$SERVER_NAME" "$CONTACT_INFO" "$CUSTOM_RULES" "${BANNER_USER:-auto}")
 
     echo -e "${C_BOLD}${C_YELLOW}📱 VISTA PREVIA (En la app HTTP Custom):${C_RESET}\n"
     render_simulated_html "$raw_banner"
@@ -425,7 +531,7 @@ select_template() {
     echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
 
     echo -e "  ${C_YELLOW}[1] ★ Info de Cuenta (HTML Pro - Recomendado)${C_RESET}"
-    echo -e "      • Cuadro de cuenta, servidor, estado y tel. 3826432180."
+    echo -e "      • Usuario, vencimiento, datos usados y tel. 3826432180."
     echo -e "  ${C_YELLOW}[2] ★ VIP Gold Móvil (HTML Neón Dorado)${C_RESET}"
     echo -e "      • Estrellas doradas VIP y contacto telefónico."
     echo -e "  ${C_YELLOW}[3] 🎮 Gaming & Low-Lag (HTML Gamer Neón)${C_RESET}"
@@ -443,6 +549,63 @@ select_template() {
         save_banner_conf
         apply_banner_system
         echo -e "\n${C_GREEN}✔ Plantilla #${TEMPLATE_ID} aplicada exitosamente en OpenSSH y Dropbear.${C_RESET}"
+        press_enter
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Seleccionar Usuario para el Banner
+# ------------------------------------------------------------------------------
+select_user_for_banner() {
+    load_banner_conf
+    clear
+    echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}USUARIO EN BANNER HTTP CUSTOM     ${C_RESET}${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}\n"
+    echo -e "Configura qué datos de usuario (nombre, vencimiento"
+    echo -e "y consumo de datos del sistema) saldrán en el banner:\n"
+    echo -e "  Usuario actual: ${C_CYAN}${BANNER_USER:-auto}${C_RESET}\n"
+    echo -e "  ${C_GREEN}[A]${C_RESET} Auto-detectar (Primer cliente activo del VPS)"
+
+    local users=()
+    while IFS=: read -r u _ uid _ _ _ _; do
+        if [[ $uid -ge 1000 && "$u" != "nobody" ]]; then
+            users+=("$u")
+        fi
+    done < /etc/passwd
+
+    local i=1
+    for u in "${users[@]}"; do
+        echo -e "  ${C_YELLOW}[$i]${C_RESET} $u"
+        ((i++))
+    done
+    echo -e "  ${C_YELLOW}[M]${C_RESET} Escribir nombre manualmente"
+    echo -e "  ${C_RED}[0]${C_RESET} Cancelar\n"
+
+    local sel=""
+    read -r -p "Seleccione una opción: " sel || true
+    if [[ "$sel" =~ ^[Aa]$ ]]; then
+        BANNER_USER="auto"
+        save_banner_conf
+        apply_banner_system
+        echo -e "\n${C_GREEN}✔ Modo auto-detectar activado.${C_RESET}"
+        press_enter
+    elif [[ "$sel" =~ ^[Mm]$ ]]; then
+        local custom_u=""
+        read -r -p "Nombre de usuario a mostrar: " custom_u || true
+        if [[ -n "$custom_u" ]]; then
+            BANNER_USER="$custom_u"
+            save_banner_conf
+            apply_banner_system
+            echo -e "\n${C_GREEN}✔ Usuario '$BANNER_USER' asignado al banner.${C_RESET}"
+            press_enter
+        fi
+    elif [[ "$sel" =~ ^[0-9]+$ && "$sel" -ge 1 && "$sel" -le "${#users[@]}" ]]; then
+        local chosen="${users[$((sel-1))]}"
+        BANNER_USER="$chosen"
+        save_banner_conf
+        apply_banner_system
+        echo -e "\n${C_GREEN}✔ Banner asignado al usuario '${chosen}'.${C_RESET}"
         press_enter
     fi
 }
@@ -564,31 +727,39 @@ main_banner_menu() {
             6) t_label="Personalizado" ;;
         esac
 
+        local u_disp="${BANNER_USER:-auto}"
+        if [[ "$u_disp" == "auto" ]]; then
+            get_system_user_info "auto"
+            u_disp="Auto (${U_NAME})"
+        fi
+
         echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
         echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}BANNERS Y REGISTRO HTTP CUSTOM${C_RESET}    ${C_CYAN}║${C_RESET}"
         echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
         echo -e "  • Apps: ${b_status}  ${C_YELLOW}${t_label}${C_RESET}"
-        echo -e "  • Dinámico: ${d_status}  ${C_CYAN}${SERVER_NAME}${C_RESET}"
+        echo -e "  • Usuario: ${C_GREEN}${u_disp}${C_RESET}"
         echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
         echo -e "  ${C_YELLOW}[1]${C_RESET} 👁️  Previsualizar banner actual"
         echo -e "  ${C_YELLOW}[2]${C_RESET} 🎨  Elegir plantilla prediseñada"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} ✏️  Personalizar textos/contacto"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} 📝  Editar archivo manualmente"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} ⚡  Activar / Desactivar en Apps"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} 👤  Activar / Desactivar Dinámico"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} 👤  Asignar usuario del banner"
+        echo -e "  ${C_YELLOW}[4]${C_RESET} ✏️  Personalizar textos/contacto"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} 📝  Editar archivo manualmente"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} ⚡  Activar / Desactivar en Apps"
+        echo -e "  ${C_YELLOW}[7]${C_RESET} 👤  Activar / Desactivar Dinámico"
         echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
         echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 
         local opt=""
-        read -r -p "Seleccione una opción [0-6]: " opt || true
+        read -r -p "Seleccione una opción [0-7]: " opt || true
 
         case "${opt:-}" in
             1) preview_banner ;;
             2) select_template ;;
-            3) customize_data ;;
-            4) manual_edit_banner ;;
-            5) toggle_banner ;;
-            6) toggle_dynamic_user ;;
+            3) select_user_for_banner ;;
+            4) customize_data ;;
+            5) manual_edit_banner ;;
+            6) toggle_banner ;;
+            7) toggle_dynamic_user ;;
             0) break ;;
             *)
                 echo -e "${C_RED}Opción inválida.${C_RESET}"
@@ -615,6 +786,17 @@ case "${1:-}" in
             echo -e "${C_GREEN}✔ Plantilla #${2} aplicada.${C_RESET}"
         else
             select_template
+        fi
+        ;;
+    --user|-u)
+        if [[ -n "${2:-}" ]]; then
+            load_banner_conf
+            BANNER_USER="$2"
+            save_banner_conf
+            apply_banner_system
+            echo -e "${C_GREEN}✔ Usuario '$2' asignado al banner.${C_RESET}"
+        else
+            select_user_for_banner
         fi
         ;;
     --enable)
