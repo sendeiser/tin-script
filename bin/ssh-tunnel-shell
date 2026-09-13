@@ -5,8 +5,25 @@
 # Genera un banner DINÁMICO con info del usuario en tiempo real (nombre, vencimiento,
 # datos usados, conexiones) y mantiene la sesión activa para port-forwarding / VPN.
 # ==============================================================================
-
-u="${USER:-$(id -un 2>/dev/null || true)}"
+# Obtener nombre de usuario con múltiples fallbacks (USER puede estar vacío en sesiones restringidas)
+u=""
+if [[ -n "${USER:-}" ]]; then
+    u="$USER"
+elif [[ -n "${LOGNAME:-}" ]]; then
+    u="$LOGNAME"
+else
+    u="$(id -un 2>/dev/null || whoami 2>/dev/null || true)"
+fi
+# Último recurso: obtener del UID del proceso
+if [[ -z "$u" || "$u" == "root" ]]; then
+    _uid="$(id -u 2>/dev/null || true)"
+    if [[ -n "$_uid" && "$_uid" -ge 1000 ]] 2>/dev/null; then
+        u="$(getent passwd "$_uid" 2>/dev/null | cut -d: -f1 || true)"
+    fi
+fi
+if [[ -z "$u" ]]; then
+    u="usuario"
+fi
 
 # --------------------------------------------------------------------------
 # 1. Recopilar info dinámica del usuario desde el sistema
