@@ -2,10 +2,10 @@
 # ==============================================================================
 # vps-ssh-limiter: bin/ssh-tunnel-shell
 # Shell restringida y persistente para cuentas de túnel SSH (HTTP Custom, Dropbear, OpenSSH).
-# Genera un banner DINÁMICO con info del usuario en tiempo real (nombre, vencimiento,
-# datos usados, conexiones) y mantiene la sesión activa para port-forwarding / VPN.
+# Muestra el banner DINÁMICO con el nombre real del usuario conectado, fecha de
+# vencimiento, días restantes y enlace interactivo de soporte.
 # ==============================================================================
-# Obtener nombre de usuario con múltiples fallbacks (USER puede estar vacío en sesiones restringidas)
+# Obtener nombre de usuario con múltiples fallbacks
 u=""
 if [[ -n "${USER:-}" ]]; then
     u="$USER"
@@ -33,11 +33,9 @@ _now_date=$(date '+%d/%m/%Y %H:%M')
 _exp_date="Sin exp."
 _days_left="Ilimitado"
 _limit="1"
-_conns="0"
-_traffic_str="0 B"
 
 # Vencimiento y días restantes (chage)
-if command -v chage >/dev/null 2>&1; then
+if command -v chage >/dev/null 2>&1 && id "$u" >/dev/null 2>&1; then
     _exp_raw=$(chage -l "$u" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
     if [[ -n "$_exp_raw" && "$_exp_raw" != "never" && "$_exp_raw" != "nunca" ]]; then
         _exp_epoch=$(date -d "$_exp_raw" +%s 2>/dev/null || true)
@@ -45,7 +43,7 @@ if command -v chage >/dev/null 2>&1; then
             _exp_date=$(date -d "@$_exp_epoch" +%d/%m/%Y 2>/dev/null || echo "$_exp_raw")
             _diff=$(( (_exp_epoch - _now_epoch) / 86400 ))
             if [[ $_diff -ge 0 ]]; then
-                _days_left="${_diff} dia(s)"
+                _days_left="${_diff} día(s)"
             else
                 _days_left="EXPIRADO"
             fi
@@ -59,142 +57,150 @@ if [[ "$_pass_line" =~ LIM[:_=-]?([0-9]+) ]]; then
     _limit="${BASH_REMATCH[1]}"
 fi
 
-# Conexiones activas del usuario (solo sshd y dropbear)
-_conns=0
-for p in $(pgrep -u "$u" 2>/dev/null || true); do
-    if [[ -r "/proc/$p/comm" ]]; then
-        _c=$(cat "/proc/$p/comm" 2>/dev/null || true)
-        if [[ "$_c" == *"sshd"* || "$_c" == *"dropbear"* ]]; then
-            _conns=$((_conns + 1))
-        fi
-    fi
-done
-
-# Consumo de datos (traffic.db persistente)
-_u_bytes=0
-if [[ -f /etc/vps-ssh-limiter/traffic.db ]]; then
-    _t_line=$(grep "^${u}:" /etc/vps-ssh-limiter/traffic.db 2>/dev/null | head -n1 || true)
-    if [[ -n "$_t_line" ]]; then
-        _u_bytes=$(echo "$_t_line" | cut -d: -f2 || echo 0)
-    fi
-fi
-
-if [[ $_u_bytes -ge 1073741824 ]]; then
-    _traffic_str=$(awk -v b="$_u_bytes" 'BEGIN { printf "%.2f GB", b / 1073741824 }')
-elif [[ $_u_bytes -ge 1048576 ]]; then
-    _traffic_str=$(awk -v b="$_u_bytes" 'BEGIN { printf "%.2f MB", b / 1048576 }')
-elif [[ $_u_bytes -ge 1024 ]]; then
-    _traffic_str=$(awk -v b="$_u_bytes" 'BEGIN { printf "%.1f KB", b / 1024 }')
-elif [[ $_u_bytes -gt 0 ]]; then
-    _traffic_str="${_u_bytes} B"
-fi
-
-# Nombre del servidor y contacto desde configuración
+# Nombre del servidor, contacto y reglas desde configuración
 _sname="SupraVPS"
 _contact="3826432180"
+_rules="Prohibido Torrent, SPAM, DDoS y Multi-Login no autorizado"
+_tmpl="1"
+
 if [[ -f /etc/vps-ssh-limiter/banner.conf ]]; then
     # shellcheck disable=SC1091
     source /etc/vps-ssh-limiter/banner.conf 2>/dev/null || true
     _sname="${SERVER_NAME:-SupraVPS}"
     _contact="${CONTACT_INFO:-3826432180}"
+    _rules="${CUSTOM_RULES:-Prohibido Torrent, SPAM, DDoS y Multi-Login no autorizado}"
+    _tmpl="${TEMPLATE_ID:-1}"
 fi
 if [[ "${_contact:-}" == *"Telegram"* || "${_contact:-}" == *"@Soporte"* || -z "${_contact:-}" ]]; then
     _contact="3826432180"
 fi
 
 # --------------------------------------------------------------------------
-# 2. Determinar plantilla del banner y mostrar
+# 2. Mostrar banner dinámico del usuario conectado
 # --------------------------------------------------------------------------
-_tmpl="${TEMPLATE_ID:-1}"
+# Si existe el banner individual pre-generado para esta cuenta, mostrarlo
+if [[ -f "/etc/vps-ssh-limiter/banners/${u}.net" && -s "/etc/vps-ssh-limiter/banners/${u}.net" ]]; then
+    cat "/etc/vps-ssh-limiter/banners/${u}.net"
+elif [[ -x /usr/local/bin/ssh-banner ]]; then
+    # shellcheck disable=SC1091
+    source /usr/local/bin/ssh-banner --source-only 2>/dev/null || true
+    generate_banner_text "$_tmpl" "$_sname" "$_contact" "$_rules" "$u"
+else
+    # Construcción inteligente de Hipervínculo
+    _link_url=""
+    _link_text=""
+    if [[ "$_contact" =~ ^https?:// ]]; then
+        _link_url="$_contact"
+        if [[ "$_contact" == *"t.me"* ]]; then
+            _link_text="Telegram Soporte"
+        elif [[ "$_contact" == *"wa.me"* || "$_contact" == *"whatsapp"* ]]; then
+            _link_text="WhatsApp Soporte"
+        else
+            _link_text="Click Aquí para Contactar"
+        fi
+    elif [[ "$_contact" =~ ^@ ]]; then
+        _tg_u="${_contact#@}"
+        _link_url="https://t.me/${_tg_u}"
+        _link_text="Telegram (@${_tg_u})"
+    elif [[ "$_contact" =~ ^t\.me/ ]]; then
+        _link_url="https://${_contact}"
+        _link_text="Telegram (${_contact#t.me/})"
+    elif [[ "$_contact" =~ ^wa\.me/ ]]; then
+        _link_url="https://${_contact}"
+        _link_text="WhatsApp (${_contact#wa.me/})"
+    else
+        _clean_num=$(echo "$_contact" | tr -cd '0-9')
+        if [[ -n "$_clean_num" && ${#clean_num} -ge 7 ]]; then
+            _link_url="https://wa.me/${_clean_num}"
+            _link_text="WhatsApp (${_contact})"
+        else
+            _link_url="https://t.me/${_contact}"
+            _link_text="Contacto: ${_contact}"
+        fi
+    fi
 
-case "$_tmpl" in
-    2)
-        cat <<EOBANNER
-<center><font color="#FFD700"><b>★ ★ ★ ${_sname} VIP NETWORK ★ ★ ★</b></font><br>
-<font color="#FFA500"><b>─────────────────────────────────────</b></font></center><br>
-<font color="#FFD700">● <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
-<font color="#FFD700">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#FFA500">(${_days_left})</font><br>
-<font color="#FFD700">● <b>Datos Usados:</b></font> <font color="#39FF14"><b>${_traffic_str}</b></font><br>
-<font color="#FFD700">● <b>Conexiones:</b></font> <font color="#FFA500">${_conns} de ${_limit} permitido(s)</font><br>
-<font color="#FFD700">● <b>Servidor:</b></font> <font color="#FFFFFF">${_sname} VIP</font><br>
-<font color="#FFD700">● <b>Estado:</b></font> <font color="#39FF14"><b>CONECTADO / VIP ULTRA</b></font><br>
-<font color="#FFD700">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${_now_date}</font><br>
-<font color="#FFD700">● <b>Contacto:</b></font> <font color="#00E5FF"><b>${_contact}</b></font><br>
+    case "$_tmpl" in
+        2)
+            cat <<EOBANNER
+<center><font color="#FFD700"><b>╔═══════════════════════════════════╗</b></font><br>
+<font color="#FFA500"><b>★ ★ ★ ${_sname} VIP NETWORK ★ ★ ★</b></font><br>
+<font color="#FFD700"><b>╚═══════════════════════════════════╝</b></font></center><br>
+<font color="#FFD700">◆ <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
+<font color="#FFD700">◆ <b>Vence:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#FFA500">(${_days_left})</font><br>
+<font color="#FFD700">◆ <b>Límite:</b></font> <font color="#FFA500"><b>${_limit} Dispositivo(s)</b></font><br>
+<font color="#FFD700">◆ <b>Contacto:</b></font> <a href="${_link_url}"><font color="#00E5FF"><b><u>${_link_text}</u></b></font></a><br>
 <font color="#FFA500">─────────────────────────────────────</font><br>
-<center><font color="#FF4444">⚠️ <b>Prohibido Torrent, SPAM y Multi-Login</b></font><br>
-<font color="#FFD700"><b>★ Servicio Exclusivo de Alta Velocidad ★</b></font></center>
+<center><font color="#FF4444">⚠️ <b>${_rules}</b></font></center>
 EOBANNER
-        ;;
-    3)
-        cat <<EOBANNER
-<center><font color="#39FF14"><b>🎮 ${_sname} GAMING LOW-PING PRO 🎮</b></font><br>
-<font color="#00FFCC"><b>─────────────────────────────────────</b></font></center><br>
-<font color="#39FF14">● <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
-<font color="#39FF14">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00FFCC">(${_days_left})</font><br>
-<font color="#39FF14">● <b>Datos Usados:</b></font> <font color="#00FFCC"><b>${_traffic_str}</b></font><br>
-<font color="#39FF14">● <b>Conexiones:</b></font> <font color="#00E5FF">${_conns} de ${_limit} permitido(s)</font><br>
-<font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${_sname} Gaming</font><br>
-<font color="#39FF14">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${_now_date}</font><br>
-<font color="#39FF14">● <b>Contacto:</b></font> <font color="#FFD700"><b>${_contact}</b></font><br>
+            ;;
+        3)
+            cat <<EOBANNER
+<center><font color="#39FF14"><b>╔═══════════════════════════════════╗</b></font><br>
+<font color="#00FFCC"><b>🎮 ${_sname} GAMING LOW-PING 🎮</b></font><br>
+<font color="#39FF14"><b>╚═══════════════════════════════════╝</b></font></center><br>
+<font color="#39FF14">► <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
+<font color="#39FF14">► <b>Vence:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00FFCC">(${_days_left})</font><br>
+<font color="#39FF14">► <b>Límite:</b></font> <font color="#00E5FF"><b>${_limit} Disp.</b></font><br>
+<font color="#39FF14">► <b>Soporte:</b></font> <a href="${_link_url}"><font color="#FFD700"><b><u>${_link_text}</u></b></font></a><br>
 <font color="#00FFCC">─────────────────────────────────────</font><br>
-<center><font color="#FF3333">⚠️ <b>Prohibido Torrent, P2P y Multi-Login</b></font><br>
-<font color="#39FF14"><b>★ Máxima Velocidad y Menor Latencia ★</b></font></center>
+<center><font color="#FF3333">⚠️ <b>${_rules}</b></font></center>
 EOBANNER
-        ;;
-    4)
-        cat <<EOBANNER
-<center><font color="#FF007F"><b>⚡ ${_sname} CYBERPUNK HIGH SPEED ⚡</b></font><br>
-<font color="#00F0FF"><b>═════════════════════════════════════</b></font></center><br>
+            ;;
+        4)
+            cat <<EOBANNER
+<center><font color="#FF007F"><b>╔═══════════════════════════════════╗</b></font><br>
+<font color="#00F0FF"><b>⚡ ${_sname} HIGH SPEED ⚡</b></font><br>
+<font color="#FF007F"><b>╚═══════════════════════════════════╝</b></font></center><br>
 <font color="#00F0FF">► <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
-<font color="#00F0FF">► <b>Vencimiento:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00F0FF">(${_days_left})</font><br>
-<font color="#00F0FF">► <b>Datos:</b></font> <font color="#FF007F"><b>${_traffic_str}</b></font><br>
-<font color="#00F0FF">► <b>Conexiones:</b></font> <font color="#FFFF00">${_conns} de ${_limit} permitido(s)</font><br>
-<font color="#00F0FF">► <b>Host:</b></font> <font color="#FFFFFF">${_sname}</font><br>
-<font color="#00F0FF">► <b>Hora:</b></font> <font color="#FFFFFF">${_now_date}</font><br>
-<font color="#00F0FF">► <b>Contacto:</b></font> <font color="#FFFF00"><b>${_contact}</b></font><br>
+<font color="#00F0FF">► <b>Vence:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00F0FF">(${_days_left})</font><br>
+<font color="#00F0FF">► <b>Límite:</b></font> <font color="#FFFF00"><b>${_limit} Disp.</b></font><br>
+<font color="#00F0FF">► <b>Contacto:</b></font> <a href="${_link_url}"><font color="#FF007F"><b><u>${_link_text}</u></b></font></a><br>
 <font color="#00F0FF">═════════════════════════════════════</font><br>
-<center><font color="#FF0055">⛔ <b>No Torrent | No Spam | No DDoS</b></font><br>
-<font color="#00F0FF"><b>★ Conexión Cifrada y Segura ★</b></font></center>
+<center><font color="#FF0055">⛔ <b>${_rules}</b></font></center>
 EOBANNER
-        ;;
-    5)
-        cat <<EOBANNER
+            ;;
+        5)
+            cat <<EOBANNER
+<center><font color="#00BFFF"><b>╔═══════════════════════════════════╗</b></font><br>
+<font color="#FFFFFF"><b>🛡️ ${_sname} SECURE GATEWAY 🛡️</b></font><br>
+<font color="#00BFFF"><b>╚═══════════════════════════════════╝</b></font></center><br>
+<font color="#00BFFF">✔ <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
+<font color="#00BFFF">✔ <b>Vence:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00BFFF">(${_days_left})</font><br>
+<font color="#00BFFF">✔ <b>Límite:</b></font> <font color="#00E5FF"><b>${_limit} simultáneo(s)</b></font><br>
+<font color="#00BFFF">✔ <b>Soporte:</b></font> <a href="${_link_url}"><font color="#FFD700"><b><u>${_link_text}</u></b></font></a><br>
+<font color="#888888">─────────────────────────────────────</font><br>
+<center><font color="#FF3366">⚠️ <b>${_rules}</b></font></center>
+EOBANNER
+            ;;
+        6)
+            cat <<EOBANNER
 ╔═══════════════════════════════════════╗
 ║     ★ INFORMACIÓN DE TU CUENTA ★      ║
 ╚═══════════════════════════════════════╝
   ● Usuario     : ${u}
   ● Vencimiento : ${_exp_date} (${_days_left})
-  ● Datos Usados: ${_traffic_str}
-  ● Conexiones  : ${_conns} de ${_limit} permitido(s)
-  ● Servidor    : ${_sname} (SSH / WS)
-  ● Estado      : ACTIVO Y OPTIMIZADO
-  ● Fecha / Hora: ${_now_date}
-  ● Contacto    : ${_contact}
+  ● Conexiones  : ${_limit} permitido(s)
+  ● Contacto    : ${_link_url}
 ─────────────────────────────────────────
- ⚠️ Prohibido Torrent, Spam y Multi-Login
+ ⚠️  ${_rules}
 ═════════════════════════════════════════
 EOBANNER
-        ;;
-    *)
-        # Plantilla 1 (por defecto): ★ INFORMACIÓN DE TU CUENTA ★ HTML Pro
-        cat <<EOBANNER
+            ;;
+        *)
+            cat <<EOBANNER
 <center><font color="#00E5FF"><b>╔═══════════════════════════════════╗</b></font><br>
 <font color="#FFD700"><b>★ INFORMACIÓN DE TU CUENTA ★</b></font><br>
 <font color="#00E5FF"><b>╚═══════════════════════════════════╝</b></font></center><br>
-<font color="#39FF14">● <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
-<font color="#39FF14">● <b>Vencimiento:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00E5FF">(${_days_left})</font><br>
-<font color="#39FF14">● <b>Datos Usados:</b></font> <font color="#FF00FF"><b>${_traffic_str}</b></font><br>
-<font color="#39FF14">● <b>Conexiones:</b></font> <font color="#00E5FF">${_conns} de ${_limit} permitido(s)</font><br>
-<font color="#39FF14">● <b>Servidor:</b></font> <font color="#FFFFFF">${_sname} (Alta Velocidad)</font><br>
-<font color="#39FF14">● <b>Estado:</b></font> <font color="#39FF14"><b>ACTIVO Y OPTIMIZADO</b></font><br>
-<font color="#39FF14">● <b>Fecha / Hora:</b></font> <font color="#FFFFFF">${_now_date}</font><br>
-<font color="#39FF14">● <b>Contacto:</b></font> <font color="#FFD700"><b>${_contact}</b></font><br>
+<font color="#00E5FF">● <b>Usuario:</b></font> <font color="#FFFFFF">${u}</font><br>
+<font color="#00E5FF">● <b>Vence:</b></font> <font color="#39FF14"><b>${_exp_date}</b></font> <font color="#00E5FF">(${_days_left})</font><br>
+<font color="#00E5FF">● <b>Límite:</b></font> <font color="#FFD700"><b>${_limit} Conexión(es)</b></font><br>
+<font color="#00E5FF">● <b>Soporte:</b></font> <a href="${_link_url}"><font color="#00FFCC"><b><u>${_link_text}</u></b></font></a><br>
 <font color="#888888">─────────────────────────────────────</font><br>
-<center><font color="#FF3366">⚠️ <b>Prohibido Torrent, SPAM y Multi-Login</b></font><br>
-<font color="#00E5FF"><b>★ Conexión Estable y de Alta Calidad ★</b></font></center>
+<center><font color="#FF3366">⚠️ <b>${_rules}</b></font></center>
 EOBANNER
-        ;;
-esac
+            ;;
+    esac
+fi
 
 # --------------------------------------------------------------------------
 # 3. Mantener la sesión activa (para port-forwarding / túnel VPN)

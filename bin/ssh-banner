@@ -549,14 +549,13 @@ if [[ -n "$USER" && "$USER" != "root" && -t 1 ]]; then
     _exp_date="Sin exp."
     _days_left="Ilimitado"
     _limit="1"
-    _conns="1"
 
     if command -v chage >/dev/null 2>&1; then
         _exp_raw=$(chage -l "$USER" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
         if [[ -n "$_exp_raw" && "$_exp_raw" != "never" && "$_exp_raw" != "nunca" ]]; then
             _exp_epoch=$(date -d "$_exp_raw" +%s 2>/dev/null || true)
             if [[ -n "$_exp_epoch" ]]; then
-                _exp_date=$(date -d "@$_exp_epoch" +%Y-%m-%d 2>/dev/null || echo "$_exp_raw")
+                _exp_date=$(date -d "@$_exp_epoch" +%d/%m/%Y 2>/dev/null || echo "$_exp_raw")
                 _diff=$(( (_exp_epoch - _now_epoch) / 86400 ))
                 if [[ $_diff -ge 0 ]]; then
                     _days_left="${_diff} día(s)"
@@ -573,40 +572,6 @@ if [[ -n "$USER" && "$USER" != "root" && -t 1 ]]; then
         _limit="${BASH_REMATCH[1]}"
     fi
 
-    # Conexiones activas del usuario
-    local -a _active_pids=()
-    for p in $(pgrep -u "$USER" 2>/dev/null || true); do
-        [[ -n "$p" && "$p" =~ ^[0-9]+$ ]] && _active_pids+=("$p")
-    done
-    _conns=${#_active_pids[@]}
-
-    # Consumo de datos del usuario
-    _u_bytes=0
-    if [[ -f /etc/vps-ssh-limiter/traffic.db ]]; then
-        _t_line=$(grep "^${USER}:" /etc/vps-ssh-limiter/traffic.db 2>/dev/null | head -n1 || true)
-        if [[ -n "$_t_line" ]]; then
-            _u_bytes=$(echo "$_t_line" | cut -d: -f2 || echo 0)
-        fi
-    fi
-    for p in "${_active_pids[@]}"; do
-        if [[ -r "/proc/$p/io" ]]; then
-            _rb=$(awk '/rchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
-            _wb=$(awk '/wchar:/ {print $2}' "/proc/$p/io" 2>/dev/null || echo 0)
-            _u_bytes=$(( _u_bytes + _rb + _wb ))
-        fi
-    done
-
-    _traffic_str="0 B"
-    if [[ $_u_bytes -ge 1073741824 ]]; then
-        _traffic_str=$(awk -v b="$_u_bytes" 'BEGIN { printf "%.2f GB", b / 1073741824 }')
-    elif [[ $_u_bytes -ge 1048576 ]]; then
-        _traffic_str=$(awk -v b="$_u_bytes" 'BEGIN { printf "%.2f MB", b / 1048576 }')
-    elif [[ $_u_bytes -ge 1024 ]]; then
-        _traffic_str=$(awk -v b="$_u_bytes" 'BEGIN { printf "%.1f KB", b / 1024 }')
-    elif [[ $_u_bytes -gt 0 ]]; then
-        _traffic_str="${_u_bytes} B"
-    fi
-
     _sname="SupraVPS"
     _contact="3826432180"
     if [[ -f /etc/vps-ssh-limiter/banner.conf ]]; then
@@ -621,16 +586,12 @@ if [[ -n "$USER" && "$USER" != "root" && -t 1 ]]; then
     fi
 
     echo -e "\033[1;36m╔═══════════════════════════════════════╗\033[0m"
-    echo -e "\033[1;36m║\033[0m     \033[1;37m★ INFORMACIÓN DE TU CUENTA ★\033[0m      \033[1;36m║\033[0m"
+    echo -e "\033[1;36m║\033[0m     \033[1;33m★ INFORMACIÓN DE TU CUENTA ★\033[0m      \033[1;36m║\033[0m"
     echo -e "\033[1;36m╚═══════════════════════════════════════╝\033[0m"
-    echo -e "  \033[1;33m● Usuario     :\033[0m \033[1;37m${USER}\033[0m"
-    echo -e "  \033[1;33m● Vencimiento :\033[0m \033[1;32m${_exp_date}\033[0m"
-    echo -e "  \033[1;33m● Días rest.  :\033[0m \033[1;36m${_days_left}\033[0m"
-    echo -e "  \033[1;33m● Datos Usados:\033[0m \033[1;35m${_traffic_str}\033[0m"
-    echo -e "  \033[1;33m● Conexiones  :\033[0m \033[1;35m${_conns} de ${_limit} permitidos\033[0m"
-    echo -e "  \033[1;33m● Estado      :\033[0m \033[1;32mACTIVO Y OPTIMIZADO\033[0m"
-    echo -e "  \033[1;33m● Fecha / Hora:\033[0m \033[1;37m${_now_date}\033[0m"
-    echo -e "  \033[1;33m● Contacto    :\033[0m \033[1;37m${_contact}\033[0m"
+    echo -e "  \033[1;36m● Usuario     :\033[0m \033[1;37m${USER}\033[0m"
+    echo -e "  \033[1;36m● Vence       :\033[0m \033[1;32m${_exp_date}\033[0m \033[1;36m(${_days_left})\033[0m"
+    echo -e "  \033[1;36m● Límite      :\033[0m \033[1;33m${_limit} Conexión(es)\033[0m"
+    echo -e "  \033[1;36m● Contacto    :\033[0m \033[4;36m${_contact}\033[0m"
     echo -e "\033[0;90m─────────────────────────────────────────\033[0m"
     echo -e " \033[1;31m⚠️  Prohibido Torrent, Spam y Multi-Login\033[0m"
     echo -e "\033[0;90m─────────────────────────────────────────\033[0m"
