@@ -2,9 +2,10 @@
 # ==============================================================================
 # vps-ssh-limiter: bin/ssh-domain
 # Gestor y creador de dominios y subdominios para el host VPS.
-# Soporta Cloudflare API (Detección automática de zonas y credenciales persistentes),
-# DuckDNS (Dinámico con auto-renovación), Dominios Gratuitos Instantáneos (sslip.io)
-# y vinculación manual de dominios personalizados.
+# Incluye Asistente Guiado Mediado Paso a Paso con Opciones 100% Gratuitas ($0.00):
+# - Dominio Instantáneo 1-Click (sslip.io - Cero registro, cero cuentas)
+# - DuckDNS Dinámico (*.duckdns.org - Gratuito con auto-renovación)
+# - Cloudflare API (Plan Gratuito $0 - Detección automática de zonas)
 # ==============================================================================
 set -euo pipefail
 
@@ -69,6 +70,49 @@ save_domain() {
     if command -v hostnamectl >/dev/null 2>&1; then
         hostnamectl set-hostname "$dom" 2>/dev/null || true
     fi
+}
+
+# ------------------------------------------------------------------------------
+# Ficha de Conexión Automática para HTTP Custom
+# ------------------------------------------------------------------------------
+show_httpcustom_card() {
+    local target_dom="$1"
+    local vps_ip="$2"
+    local mode="${3:-direct}"
+
+    # Detectar usuario túnel de muestra de la VPS
+    local sample_user="tu_usuario"
+    local sample_pass="tu_contraseña"
+    if [[ -f "/etc/vps-ssh-limiter/users.db" ]]; then
+        local first_line
+        first_line=$(head -n1 "/etc/vps-ssh-limiter/users.db" 2>/dev/null || true)
+        if [[ -n "$first_line" ]]; then
+            sample_user=$(echo "$first_line" | cut -d: -f1)
+            sample_pass=$(echo "$first_line" | cut -d: -f2)
+        fi
+    fi
+
+    echo -e "\n${C_GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_GREEN}║                 DATOS LISTOS PARA COPIAR EN HTTP CUSTOM                      ║${C_RESET}"
+    echo -e "${C_GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
+    echo -e "  • ${C_BOLD}Server / Host SSH:${C_RESET}  ${C_CYAN}${C_BOLD}${target_dom}:80${C_RESET}"
+    echo -e "  • ${C_BOLD}Puerto:${C_RESET}             ${C_YELLOW}80${C_RESET} (Servicio WebSocket ssh-wsproxy -> Dropbear:143)"
+    echo -e "  • ${C_BOLD}Usuario Túnel:${C_RESET}      ${C_WHITE}${sample_user}${C_RESET}"
+    echo -e "  • ${C_BOLD}Contraseña:${C_RESET}         ${C_WHITE}${sample_pass}${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_BOLD}Payload recomendado listo para copiar y pegar en HTTP Custom:${C_RESET}"
+    if [[ "$mode" == "cloudflare" ]]; then
+        echo -e "  ${C_CYAN}GET / HTTP/1.3[crlf]Host: rexo.personal.com.ar[crlf][crlf][crlf][split][crlf][split]GETT / HTTP/1.1[crlf]Host: ${target_dom}[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]${C_RESET}"
+    else
+        echo -e "  ${C_CYAN}GET / HTTP/1.1[crlf]Host: rexo.personal.com.ar[crlf]Upgrade: websocket[crlf]Connection: Keep-Alive[crlf][crlf]${C_RESET}"
+    fi
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_YELLOW}★ Instrucciones de conexión en la app HTTP Custom de tu teléfono:${C_RESET}"
+    echo -e "    1. Abre HTTP Custom y activa las casillas ${C_BOLD}'Payload'${C_RESET} y ${C_BOLD}'Auto Ping'${C_RESET}."
+    echo -e "    2. En el recuadro superior pega el ${C_BOLD}Payload${C_RESET} de arriba."
+    echo -e "    3. En el campo Server pon: ${C_CYAN}${target_dom}:80@${sample_user}:${sample_pass}${C_RESET}"
+    echo -e "    4. Pulsa ${C_GREEN}${C_BOLD}[CONNECT]${C_RESET}. ¡Conexión 100% gratuita establecida!"
+    echo -e "${C_GREEN}══════════════════════════════════════════════════════════════════════════════${C_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -165,7 +209,7 @@ load_cf_credentials() {
     echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}║             AUTENTICACIÓN EN CLOUDFLARE API                      ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
-    echo -e "${C_YELLOW}¿Dónde obtener tus credenciales de Cloudflare?${C_RESET}"
+    echo -e "${C_YELLOW}¿Dónde obtener tus credenciales gratuitas de Cloudflare?${C_RESET}"
     echo -e " 1. Ingresa a tu panel en: ${C_CYAN}https://dash.cloudflare.com${C_RESET}"
     echo -e " 2. Arriba a la derecha haz clic en tu perfil > ${C_BOLD}'My Profile' (Mi Perfil)${C_RESET}"
     echo -e " 3. En la columna izquierda entra a ${C_BOLD}'API Tokens'${C_RESET}"
@@ -226,13 +270,239 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
+# ASISTENTE MEDIADO Y GUIADO PASO A PASO (100% GRATUITO)
+# ------------------------------------------------------------------------------
+wizard_step_instant() {
+    local vps_ip="$1"
+    clear
+    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║     ★ PASO A PASO: DOMINIO INSTANTÁNEO 1-CLICK (100% GRATUITO) ★             ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}Paso 1 de 3: ¿Por qué este método es 100% gratuito y no requiere nada?${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  El servicio global ${C_CYAN}sslip.io${C_RESET} proporciona resolución DNS automática en todo el"
+    echo -e "  mundo sin que tengas que registrarte, ni ingresar tarjetas, ni crear contraseñas."
+    echo -e "  Convierte tu IP pública en un dominio FQDN internacional válido de forma inmediata.\n"
+
+    local ip_dash="${vps_ip//./-}"
+    local generated_dom="vps-${ip_dash}.sslip.io"
+
+    echo -e "${C_BOLD}${C_YELLOW}Paso 2 de 3: Generación y Verificación del Dominio${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  • IP pública de tu VPS: ${C_YELLOW}${C_BOLD}${vps_ip}${C_RESET}"
+    echo -e "  • Dominio asignado:     ${C_GREEN}${C_BOLD}${generated_dom}${C_RESET}\n"
+
+    local conf_use=""
+    read -r -p "¿Deseas aplicar este dominio gratuito a tu VPS ahora mismo? [S/n]: " conf_use || true
+    if [[ "${conf_use:-}" =~ ^[nN]$ ]]; then
+        echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+        press_enter
+        return 0
+    fi
+
+    echo -e "\n${C_CYAN}Verificando la resolución DNS en tiempo real...${C_RESET}"
+    local test_ip=""
+    test_ip=$(ping -c 1 -W 2 "$generated_dom" 2>/dev/null | grep -oP '\(\K[0-9.]+(?=\))' | head -n1 || \
+              getent ahosts "$generated_dom" 2>/dev/null | awk '{print $1}' | head -n1 || echo "")
+
+    if [[ "$test_ip" == "$vps_ip" ]]; then
+        echo -e "${C_GREEN}✔ Resolución verificada exitosamente: ${generated_dom} -> ${vps_ip}${C_RESET}"
+    else
+        echo -e "${C_YELLOW}[AVISO] Resolución pendiente de propagación local, pero el dominio está activo.${C_RESET}"
+    fi
+
+    save_domain "$generated_dom"
+
+    echo -e "\n${C_BOLD}${C_YELLOW}Paso 3 de 3: Configuración Automática para HTTP Custom${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "¡Tu dominio gratuito ya está activo y vinculado a tu VPS!"
+    show_httpcustom_card "$generated_dom" "$vps_ip" "direct"
+    press_enter
+}
+
+wizard_step_duckdns() {
+    local vps_ip="$1"
+    clear
+    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║     ★ PASO A PASO: SUBDOMINIO DUCKDNS GRATUITO (*.duckdns.org) ★             ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}Paso 1 de 4: Obtener tu Token Gratuito de DuckDNS${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  1. En tu celular o PC, entra en: ${C_CYAN}https://www.duckdns.org${C_RESET}"
+    echo -e "  2. Haz clic en ${C_BOLD}'Sign in with Google'${C_RESET} e inicia sesión con tu Gmail (${C_GREEN}100% gratis${C_RESET})."
+    echo -e "  3. En la parte superior de la página verás un recuadro con tu ${C_BOLD}'token'${C_RESET} privado."
+    echo -e "     ${C_GRAY}(Es una serie de letras y números como: a1b2c3d4-e5f6-7890-...)${C_RESET}\n"
+
+    local duck_token="" duck_sub=""
+    if [[ -f "$DUCK_CONF_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$DUCK_CONF_FILE" 2>/dev/null || true
+        if [[ -n "${DUCK_TOKEN:-}" && -n "${DUCK_SUB:-}" ]]; then
+            local masked="••••••••••••${DUCK_TOKEN: -4}"
+            echo -e "${C_GREEN}✔ Se encontraron datos guardados de DuckDNS: ${C_BOLD}${DUCK_SUB}.duckdns.org${C_RESET} (${masked})"
+            local use_s=""
+            read -r -p "¿Deseas utilizar estos mismos datos guardados? [S/n]: " use_s || true
+            if [[ ! "${use_s:-}" =~ ^[nN]$ ]]; then
+                duck_token="$DUCK_TOKEN"
+                duck_sub="$DUCK_SUB"
+            fi
+        fi
+    fi
+
+    if [[ -z "$duck_token" ]]; then
+        read -r -p "Pega aquí tu Token de DuckDNS: " duck_token || true
+        duck_token=$(echo "$duck_token" | tr -d '[:space:]')
+        if [[ -z "$duck_token" ]]; then
+            echo -e "${C_YELLOW}Token no ingresado. Operación cancelada.${C_RESET}"
+            press_enter
+            return 0
+        fi
+    fi
+
+    echo -e "\n${C_BOLD}${C_YELLOW}Paso 2 de 4: Elegir tu subdominio gratuito${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  En la misma página de DuckDNS, en la sección ${C_BOLD}'domains'${C_RESET}:"
+    echo -e "  1. Escribe el nombre que quieras para tu VPS (ej: ${C_CYAN}miservidor${C_RESET})."
+    echo -e "  2. Haz clic en el botón verde ${C_BOLD}'add domain'${C_RESET}."
+    echo -e "  3. Escribe ese mismo nombre a continuación.\n"
+
+    if [[ -z "$duck_sub" ]]; then
+        read -r -p "Nombre del subdominio (solo el nombre, sin .duckdns.org): " duck_sub || true
+        duck_sub=$(echo "$duck_sub" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+        if [[ -z "$duck_sub" ]]; then
+            echo -e "${C_YELLOW}Nombre no ingresado. Operación cancelada.${C_RESET}"
+            press_enter
+            return 0
+        fi
+    fi
+
+    local full_dom="${duck_sub}.duckdns.org"
+
+    echo -e "\n${C_BOLD}${C_YELLOW}Paso 3 de 4: Vinculación y Auto-renovación${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "Conectando con DuckDNS para apuntar ${C_BOLD}${full_dom}${C_RESET} -> ${C_YELLOW}${vps_ip}${C_RESET}..."
+
+    local duck_res
+    duck_res=$(curl -s -m 8 "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=${vps_ip}" || true)
+
+    if [[ "$duck_res" == "OK" ]]; then
+        echo -e "${C_GREEN}${C_BOLD}✔ ¡DuckDNS vinculado exitosamente!${C_RESET}"
+
+        # Guardar en archivo de configuración con permisos 600
+        mkdir -p "$CONFIG_DIR"
+        cat > "$DUCK_CONF_FILE" <<EOF
+DUCK_SUB="${duck_sub}"
+DUCK_TOKEN="${duck_token}"
+EOF
+        chmod 600 "$DUCK_CONF_FILE"
+
+        # Configurar cron job para mantener la IP actualizada automáticamente cada 4 horas
+        local cron_script="/etc/vps-ssh-limiter/duckdns_update.sh"
+        cat > "$cron_script" <<EOF
+#!/usr/bin/env bash
+curl -s "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=" >/dev/null 2>&1
+EOF
+        chmod 700 "$cron_script"
+
+        if command -v crontab >/dev/null 2>&1; then
+            ( crontab -l 2>/dev/null | grep -v "$cron_script" ; echo "0 */4 * * * $cron_script >/dev/null 2>&1" ) | crontab - 2>/dev/null || true
+            echo -e "${C_GREEN}✔ Renovación automática programada (la IP nunca vencerá).${C_RESET}"
+        fi
+
+        save_domain "$full_dom"
+
+        echo -e "\n${C_BOLD}${C_YELLOW}Paso 4 de 4: Configuración para HTTP Custom${C_RESET}"
+        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+        show_httpcustom_card "$full_dom" "$vps_ip" "direct"
+    else
+        echo -e "${C_RED}[ERROR] DuckDNS respondió con error: '$duck_res'.${C_RESET}"
+        echo -e "${C_YELLOW}Verifica que el token y el nombre coincidan con lo que ves en duckdns.org.${C_RESET}"
+    fi
+    press_enter
+}
+
+wizard_step_cloudflare() {
+    local vps_ip="$1"
+    clear
+    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║     ★ PASO A PASO: CLOUDFLARE API (PLAN GRATUITO \$0) ★                        ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_BOLD}${C_YELLOW}Paso 1 de 4: ¿Qué necesitas para esta opción?${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  Cloudflare ofrece servicio de CDN y DNS ${C_GREEN}100% GRATIS${C_RESET} (Plan Free \$0)."
+    echo -e "  Esta opción es para quienes ya tienen un dominio agregado en Cloudflare."
+    echo -e "  El script detectará automáticamente tus dominios sin pedirte Zone IDs.\n"
+
+    setup_cloudflare
+}
+
+wizard_free_domains() {
+    clear
+    echo -e "${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}║     ★ ASISTENTE GUIADO PASO A PASO: DOMINIOS Y HOSTS 100% GRATUITOS ★       ║${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+
+    echo -e "${C_WHITE}¡Bienvenido! Este asistente te acompañará paso a paso para configurar un${C_RESET}"
+    echo -e "${C_WHITE}dominio o nombre de host para tu VPS ${C_BOLD}${C_GREEN}SIN GASTAR UN SOLO CENTAVO ($0.00)${C_RESET}${C_WHITE}.${C_RESET}\n"
+
+    local vps_ip
+    vps_ip=$(get_public_ip)
+    if [[ -z "$vps_ip" ]]; then
+        echo -e "${C_RED}[ERROR] No se pudo detectar la IP pública de tu servidor VPS.${C_RESET}"
+        press_enter
+        return 1
+    fi
+    echo -e "IP pública detectada de tu VPS: ${C_YELLOW}${C_BOLD}${vps_ip}${C_RESET}\n"
+
+    echo -e "${C_BOLD}Elige la alternativa 100% gratuita que mejor se adapte a ti:${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_BOLD}${C_YELLOW}[1] ★ Dominio Instantáneo 1-Click (sslip.io)${C_RESET} ${C_GREEN}◄ RECOMENDADO / MÁS FÁCIL${C_RESET}"
+    echo -e "      • ${C_BOLD}Costo:${C_RESET} ${C_GREEN}\$0.00 (Totalmente gratis)${C_RESET}"
+    echo -e "      • ${C_BOLD}Registro:${C_RESET} ${C_CYAN}CERO registros, cero cuentas, cero contraseñas.${C_RESET}"
+    echo -e "      • ${C_BOLD}Tiempo:${C_RESET} 1 segundo. Se activa al instante."
+    echo -e "      • ${C_BOLD}Ideal si:${C_RESET} Quieres conectar ya mismo a HTTP Custom sin trámites."
+    echo -e ""
+    echo -e "  ${C_BOLD}${C_YELLOW}[2] ★ DuckDNS Personalizado (*.duckdns.org)${C_RESET}"
+    echo -e "      • ${C_BOLD}Costo:${C_RESET} ${C_GREEN}\$0.00 (Gratis para siempre)${C_RESET}"
+    echo -e "      • ${C_BOLD}Registro:${C_RESET} Solo iniciar sesión con Google en duckdns.org (toma 10 seg)."
+    echo -e "      • ${C_BOLD}Tiempo:${C_RESET} 1 minuto."
+    echo -e "      • ${C_BOLD}Ideal si:${C_RESET} Quieres un nombre personalizado (ej: tunombre.duckdns.org)."
+    echo -e "      • ${C_BOLD}Auto-renovación:${C_RESET} El script programa un cron para que nunca venza."
+    echo -e ""
+    echo -e "  ${C_BOLD}${C_YELLOW}[3] ★ Cloudflare API (Plan Gratuito \$0)${C_RESET}"
+    echo -e "      • ${C_BOLD}Costo:${C_RESET} ${C_GREEN}\$0.00 con tu cuenta gratuita de Cloudflare.${C_RESET}"
+    echo -e "      • ${C_BOLD}Ideal si:${C_RESET} Ya tienes un dominio agregado en Cloudflare."
+    echo -e "      • ${C_BOLD}Detección:${C_RESET} El script detecta tu dominio automáticamente."
+    echo -e ""
+    echo -e "  ${C_RED}[0] Volver al menú de dominios${C_RESET}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────${C_RESET}"
+
+    local opt_wiz=""
+    read -r -p "Selecciona una opción gratuita [0-3]: " opt_wiz || true
+
+    case "${opt_wiz:-}" in
+        1) wizard_step_instant "$vps_ip" ;;
+        2) wizard_step_duckdns "$vps_ip" ;;
+        3) wizard_step_cloudflare "$vps_ip" ;;
+        0) return 0 ;;
+        *)
+            echo -e "${C_RED}Opción inválida.${C_RESET}"
+            sleep 1
+            ;;
+    esac
+}
+
+# ------------------------------------------------------------------------------
 # 1. Integración Inteligente con Cloudflare API (Detección Automática de Zonas)
 # ------------------------------------------------------------------------------
 setup_cloudflare() {
     echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}║     CREAR SUBDOMINIO CON CLOUDFLARE API (DETECCIÓN AUTOMÁTICA)   ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_YELLOW}Crea o actualiza un registro DNS tipo A en tu cuenta de Cloudflare"
+    echo -e "${C_YELLOW}Crea o actualiza un registro DNS tipo A en tu cuenta gratuita de Cloudflare"
     echo -e "apuntando automáticamente a la IP pública de esta VPS.${C_RESET}\n"
 
     local vps_ip
@@ -275,7 +545,7 @@ setup_cloudflare() {
         echo -e "\n${C_RED}[ERROR] Cloudflare rechazó la autenticación:${C_RESET} ${err_msg}"
         echo -e "${C_YELLOW}Verifica tus credenciales (Token o Global API Key + Email).${C_RESET}"
         if [[ -f "$CF_CONF_FILE" ]]; then
-            echo -e "${C_GRAY}Puedes borrar las credenciales guardadas desde la opción [8] del menú.${C_RESET}"
+            echo -e "${C_GRAY}Puedes borrar las credenciales guardadas desde la opción [9] del menú.${C_RESET}"
         fi
         press_enter
         return 1
@@ -283,12 +553,10 @@ setup_cloudflare() {
 
     if [[ "$parsed_zones" == "EMPTY" || -z "$parsed_zones" ]]; then
         echo -e "\n${C_YELLOW}⚠ No se encontró ningún dominio activo en tu cuenta de Cloudflare.${C_RESET}\n"
-        echo -e "${C_BOLD}¿Qué debes hacer para poder usar Cloudflare?${C_RESET}"
-        echo -e " 1. Adquiere un dominio (ej: en Namecheap, Hostinger, Nic.ar, DonWeb, etc.)."
-        echo -e " 2. En tu panel de Cloudflare (dash.cloudflare.com), haz clic en ${C_CYAN}'Add a Site'${C_RESET}."
-        echo -e " 3. Cambia los Nameservers en tu proveedor de dominio por los de Cloudflare."
-        echo -e " 4. Cuando el estado figure en verde (${C_GREEN}'Active'${C_RESET}), vuelve a esta opción."
-        echo -e "\n${C_GRAY}Alternativa sin dominio propio: Usa la opción [2] DuckDNS o [3] sslip.io (Instantáneo).${C_RESET}"
+        echo -e "${C_BOLD}¿Qué puedes hacer?${C_RESET}"
+        echo -e " Si no tienes un dominio propio, ¡usa las opciones 100% gratuitas del asistente!"
+        echo -e "   • ${C_GREEN}Opción [1] Dominio Instantáneo 1-Click (sslip.io)${C_RESET} -> Cero cuentas y cero costo."
+        echo -e "   • ${C_GREEN}Opción [2] DuckDNS (*.duckdns.org)${C_RESET} -> 100% gratis con tu cuenta de Gmail."
         press_enter
         return 1
     fi
@@ -436,15 +704,13 @@ setup_cloudflare() {
         fi
         echo -e "  • Estado Proxy:     ${proxy_desc}\n"
 
-        if [[ "$proxied" == "true" ]]; then
-            echo -e "${C_BOLD}Uso en HTTP Custom / WebSocket CDN (Puerto 80):${C_RESET}"
-            echo -e "  1. En tu app HTTP Custom:"
-            echo -e "     - Server / Host:   ${C_CYAN}${full_domain}:80${C_RESET} (o IP de Cloudflare CDN)"
-            echo -e "     - Payload Host:    ${C_GREEN}Host: ${full_domain}${C_RESET}"
-            echo -e "  2. Puedes usar el asistente automático escribiendo: ${C_BOLD}sudo http-custom${C_RESET}\n"
-        fi
-
         save_domain "$full_domain"
+
+        if [[ "$proxied" == "true" ]]; then
+            show_httpcustom_card "$full_domain" "$vps_ip" "cloudflare"
+        else
+            show_httpcustom_card "$full_domain" "$vps_ip" "direct"
+        fi
     else
         echo -e "\n${C_RED}[ERROR] Cloudflare rechazó la solicitud:${C_RESET}"
         echo "$create_res" | cf_print_errors_py || echo "$create_res"
@@ -456,132 +722,18 @@ setup_cloudflare() {
 # 2. Dominio Dinámico Gratuito con DuckDNS
 # ------------------------------------------------------------------------------
 setup_duckdns() {
-    echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║             VINCULAR DOMINIO GRATUITO CON DUCKDNS                ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_GRAY}DuckDNS (https://www.duckdns.org) ofrece subdominios *.duckdns.org 100% gratuitos.${C_RESET}\n"
-
     local vps_ip
     vps_ip=$(get_public_ip)
-    echo -e "IP pública detectada: ${C_GREEN}${C_BOLD}${vps_ip}${C_RESET}\n"
-
-    local duck_sub="" duck_token=""
-    if [[ -f "$DUCK_CONF_FILE" ]]; then
-        # shellcheck disable=SC1090
-        source "$DUCK_CONF_FILE" 2>/dev/null || true
-        if [[ -n "${DUCK_SUB:-}" && -n "${DUCK_TOKEN:-}" ]]; then
-            local masked_tok="••••••••••••${DUCK_TOKEN: -4}"
-            echo -e "${C_GREEN}✔ Datos guardados de DuckDNS encontrados:${C_RESET}"
-            echo -e "  Subdominio: ${C_BOLD}${DUCK_SUB}.duckdns.org${C_RESET} (Token: ${masked_tok})"
-            local use_saved_duck=""
-            read -r -p "¿Deseas actualizar con estos mismos datos? [S/n]: " use_saved_duck || true
-            if [[ ! "${use_saved_duck:-}" =~ ^[nN]$ ]]; then
-                duck_sub="$DUCK_SUB"
-                duck_token="$DUCK_TOKEN"
-            fi
-        fi
-    fi
-
-    if [[ -z "$duck_sub" || -z "$duck_token" ]]; then
-        echo -e "${C_YELLOW}¿Cómo obtener un subdominio y token en DuckDNS?${C_RESET}"
-        echo -e " 1. Ingresa a: ${C_CYAN}https://www.duckdns.org${C_RESET} e inicia sesión con tu cuenta de Google."
-        echo -e " 2. En la parte superior de la página verás tu ${C_BOLD}'token'${C_RESET} privado."
-        echo -e " 3. En la sección 'domains', escribe el subdominio que desees (ej: 'miservidor') y pulsa 'add domain'."
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}\n"
-
-        read -r -p "Subdominio de DuckDNS (solo el nombre, ej: 'miservidor'): " duck_sub || true
-        duck_sub=$(echo "$duck_sub" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-        if [[ -z "$duck_sub" ]]; then
-            echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-            press_enter
-            return 0
-        fi
-
-        read -r -p "Token privado de DuckDNS: " duck_token || true
-        duck_token=$(echo "$duck_token" | tr -d '[:space:]')
-        if [[ -z "$duck_token" ]]; then
-            echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-            press_enter
-            return 0
-        fi
-    fi
-
-    echo -e "\n${C_CYAN}Actualizando IP en DuckDNS...${C_RESET}"
-    local duck_res
-    duck_res=$(curl -s -m 8 "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=${vps_ip}" || true)
-
-    if [[ "$duck_res" == "OK" ]]; then
-        local full_domain="${duck_sub}.duckdns.org"
-        echo -e "${C_GREEN}${C_BOLD}✔ ¡DuckDNS actualizado correctamente!${C_RESET}"
-        echo -e "Tu dominio es: ${C_BOLD}${C_CYAN}${full_domain}${C_RESET} -> ${vps_ip}"
-
-        # Guardar credenciales de DuckDNS
-        mkdir -p "$CONFIG_DIR"
-        cat > "$DUCK_CONF_FILE" <<EOF
-DUCK_SUB="${duck_sub}"
-DUCK_TOKEN="${duck_token}"
-EOF
-        chmod 600 "$DUCK_CONF_FILE"
-
-        # Configurar cron job para mantener la IP actualizada automáticamente cada 4 horas
-        local cron_script="/etc/vps-ssh-limiter/duckdns_update.sh"
-        cat > "$cron_script" <<EOF
-#!/usr/bin/env bash
-curl -s "https://www.duckdns.org/update?domains=${duck_sub}&token=${duck_token}&ip=" >/dev/null 2>&1
-EOF
-        chmod 700 "$cron_script"
-
-        # Añadir al crontab si no existe
-        if command -v crontab >/dev/null 2>&1; then
-            ( crontab -l 2>/dev/null | grep -v "$cron_script" ; echo "0 */4 * * * $cron_script >/dev/null 2>&1" ) | crontab - 2>/dev/null || true
-            echo -e "${C_GRAY}✔ Cron job programado para renovación automática cada 4 horas.${C_RESET}"
-        fi
-
-        save_domain "$full_domain"
-    else
-        echo -e "${C_RED}[ERROR] DuckDNS respondió con error: '$duck_res'.${C_RESET}"
-        echo -e "${C_GRAY}Verifica que el subdominio y el token sean exactamente correctos.${C_RESET}"
-    fi
-    press_enter
+    wizard_step_duckdns "$vps_ip"
 }
 
 # ------------------------------------------------------------------------------
 # 3. Dominio Gratuito Instantáneo (sslip.io / nip.io - Cero Configuración)
 # ------------------------------------------------------------------------------
 setup_instant_domain() {
-    echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}║       DOMINIO GRATUITO INSTANTÁNEO (1-CLICK SSLIP.IO)            ║${C_RESET}"
-    echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_YELLOW}sslip.io es un servicio de DNS Wildcard gratuito que convierte tu IP"
-    echo -e "en un dominio FQDN válido internacionalmente sin registrar cuentas ni esperar.${C_RESET}\n"
-
     local vps_ip
     vps_ip=$(get_public_ip)
-    if [[ -z "$vps_ip" ]]; then
-        echo -e "${C_RED}[ERROR] No se pudo detectar la IP pública.${C_RESET}"
-        press_enter
-        return 1
-    fi
-
-    echo -e "IP pública detectada: ${C_GREEN}${C_BOLD}${vps_ip}${C_RESET}"
-    local ip_dash="${vps_ip//./-}"
-    local instant_dom="vps-${ip_dash}.sslip.io"
-
-    echo -e "Dominio generado: ${C_BOLD}${C_CYAN}${instant_dom}${C_RESET}"
-    echo -e "${C_GRAY}Probando resolución DNS en tiempo real...${C_RESET}"
-
-    local test_ip=""
-    test_ip=$(ping -c 1 -W 2 "$instant_dom" 2>/dev/null | grep -oP '\(\K[0-9.]+(?=\))' | head -n1 || \
-              getent ahosts "$instant_dom" 2>/dev/null | awk '{print $1}' | head -n1 || echo "")
-
-    if [[ "$test_ip" == "$vps_ip" ]]; then
-        echo -e "${C_GREEN}✔ Resolución verificada exitosamente: ${instant_dom} -> ${vps_ip}${C_RESET}"
-    else
-        echo -e "${C_YELLOW}[AVISO] Resolución pendiente de propagación local, pero el dominio está activo.${C_RESET}"
-    fi
-
-    save_domain "$instant_dom"
-    press_enter
+    wizard_step_instant "$vps_ip"
 }
 
 # ------------------------------------------------------------------------------
@@ -591,7 +743,7 @@ setup_manual_domain() {
     echo -e "\n${C_BOLD}${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}║             ASIGNAR DOMINIO PROPIO MANUALMENTE                  ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
-    echo -e "${C_YELLOW}Utiliza esta opción si ya compraste tu dominio y creaste el registro"
+    echo -e "${C_YELLOW}Utiliza esta opción si ya tienes tu dominio y creaste el registro"
     echo -e "tipo 'A' apuntando a la IP de tu VPS en tu registrador o panel DNS.${C_RESET}\n"
 
     local vps_ip
@@ -616,6 +768,7 @@ setup_manual_domain() {
     if [[ "$resolved_ip" == "$vps_ip" ]]; then
         echo -e "${C_GREEN}✔ ¡Verificación exitosa! El dominio ya apunta a este servidor.${C_RESET}"
         save_domain "$man_domain"
+        show_httpcustom_card "$man_domain" "$vps_ip" "direct"
     else
         echo -e "${C_YELLOW}[AVISO] El dominio resuelve a: '${resolved_ip:-Sin respuesta}' (IP VPS: ${vps_ip}).${C_RESET}"
         echo -e "¿Deseas guardarlo de todos modos? (Útil si acabas de crear el DNS y está propagando)"
@@ -623,6 +776,7 @@ setup_manual_domain() {
         read -r -p "¿Guardar dominio de todos modos? [s/N]: " force_save || true
         if [[ "${force_save:-}" =~ ^[sS]$ ]]; then
             save_domain "$man_domain"
+            show_httpcustom_card "$man_domain" "$vps_ip" "direct"
         else
             echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
         fi
@@ -710,16 +864,18 @@ show_domain_guide() {
     echo -e "${C_BOLD}${C_CYAN}║     GUÍA COMPLETA: CÓMO CREAR, CONFIGURAR Y USAR DOMINIOS EN TU VPS      ║${C_RESET}"
     echo -e "${C_BOLD}${C_CYAN}╚══════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "${C_BOLD}${C_YELLOW}1. ¿POR QUÉ NECESITAS UN DOMINIO EN TU SERVIDOR VPS?${C_RESET}"
+    echo -e "${C_BOLD}${C_YELLOW}1. OPCIONES 100% GRATUITAS ($0.00) DISPONIBLES EN ESTE SCRIPT${C_RESET}"
     echo -e "──────────────────────────────────────────────────────────────────────────"
-    echo -e "  • ${C_GREEN}WebSocket Cloudflare CDN (HTTP Custom en puerto 80):${C_RESET}"
-    echo -e "    Las aplicaciones como HTTP Custom usan trucos de 'Bug Host' (SNI) de"
-    echo -e "    operadoras móviles (ej: Personal, Claro, Movistar, WhatsApp ilimitado)."
-    echo -e "    Para que la operadora no cobre datos y Cloudflare sepa hacia qué VPS"
-    echo -e "    enviar la conexión, se necesita un dominio con Proxy activado (Nube Naranja)."
-    echo -e "  • ${C_GREEN}Flexibilidad total:${C_RESET} Si cambias de servidor VPS o tu proveedor cambia"
-    echo -e "    tu IP pública, solo actualizas el registro DNS y tus clientes reconectan"
-    echo -e "    sin tener que reinstalar ni volver a configurar sus aplicaciones.\n"
+    echo -e "  • ${C_GREEN}Opción A: Dominio Instantáneo (sslip.io):${C_RESET}"
+    echo -e "    - Costo: \$0.00. Cero cuentas, cero registros."
+    echo -e "    - Genera al instante: vps-X-X-X-X.sslip.io."
+    echo -e "    - Conecta directamente por WebSocket en puerto 80 con Bug Host."
+    echo -e "  • ${C_GREEN}Opción B: DuckDNS (*.duckdns.org):${C_RESET}"
+    echo -e "    - Costo: \$0.00 para siempre."
+    echo -e "    - Solo necesitas entrar a duckdns.org con tu cuenta de Google."
+    echo -e "    - Te da un nombre propio (ej: tunombre.duckdns.org) y el script lo renueva solo."
+    echo -e "  • ${C_GREEN}Opción C: Cloudflare CDN (Plan Gratuito Free \$0):${C_RESET}"
+    echo -e "    - Cloudflare no cobra nada por gestionar DNS ni por su red CDN WebSocket.\n"
 
     echo -e "${C_BOLD}${C_YELLOW}2. ¿CÓMO FUNCIONA LA CONEXIÓN WEBSOCKET CDN (PUERTO 80)?${C_RESET}"
     echo -e "──────────────────────────────────────────────────────────────────────────"
@@ -728,51 +884,16 @@ show_domain_guide() {
     echo -e "       ▼ (Petición HTTP con Bug Host de la operadora)"
     echo -e "  [Red Móvil / Bug Host (ej: rexo.personal.com.ar)] -> Datos Cero / WhatsApp"
     echo -e "       │"
-    echo -e "       ▼ (Payload lleva cabecera 'Host: vps1.tudominio.com')"
-    echo -e "  [Cloudflare CDN (Nube Naranja)] -> Busca el subdominio 'vps1.tudominio.com'"
-    echo -e "       │"
-    echo -e "       ▼ (Upgrade WebSocket a través de puerto 80)"
+    echo -e "       ▼ (Payload lleva cabecera 'Host: tudominio-o-sslip')"
     echo -e "  [Tu VPS (Puerto 80: ssh-wsproxy -> Dropbear:143)] -> ¡Túnel Establecido!\n"
 
-    echo -e "${C_BOLD}${C_YELLOW}3. TUTORIAL: CONFIGURAR DOMINIO PROPIO EN CLOUDFLARE DESDE CERO${C_RESET}"
+    echo -e "${C_BOLD}${C_YELLOW}3. NUBE NARANJA (PROXY CDN) VS NUBE GRIS (DNS DIRECTO)${C_RESET}"
     echo -e "──────────────────────────────────────────────────────────────────────────"
-    echo -e "  ${C_BOLD}Paso A: Registrar un dominio propio${C_RESET}"
-    echo -e "    Compra un dominio económico (ej: .shop, .xyz, .top, .com) en registradores"
-    echo -e "    como Namecheap, Hostinger, DonWeb, GoDaddy, Nic.ar, etc."
-    echo -e "  ${C_BOLD}Paso B: Agregar el dominio a Cloudflare (100% Gratis)${C_RESET}"
-    echo -e "    1. Crea una cuenta gratuita en ${C_CYAN}https://dash.cloudflare.com${C_RESET}."
-    echo -e "    2. En el inicio haz clic en ${C_BOLD}'Add a site'${C_RESET} y escribe tu dominio."
-    echo -e "    3. Elige el ${C_BOLD}Plan Gratuito (Free \$0)${C_RESET} al final de la lista de planes."
-    echo -e "  ${C_BOLD}Paso C: Cambiar los NameServers${C_RESET}"
-    echo -e "    Cloudflare te mostrará 2 servidores de nombres (ej: 'aria.ns.cloudflare.com')."
-    echo -e "    Entra a la página donde compraste el dominio y cambia los DNS por los de Cloudflare."
-    echo -e "  ${C_BOLD}Paso D: Esperar la activación (5 a 15 minutos)${C_RESET}"
-    echo -e "    Cuando Cloudflare marque tu dominio con una tilde verde (${C_GREEN}'Active'${C_RESET}),"
-    echo -e "    ¡ya puedes usar la opción [1] de este autoscript para crear subdominios automáticamente!\n"
-
-    echo -e "${C_BOLD}${C_YELLOW}4. ¿DÓNDE OBTENER TUS CREDENCIALES DE CLOUDFLARE?${C_RESET}"
-    echo -e "──────────────────────────────────────────────────────────────────────────"
-    echo -e "  1. Entra a tu panel de Cloudflare (${C_CYAN}https://dash.cloudflare.com${C_RESET})."
-    echo -e "  2. Arriba a la derecha haz clic en el ícono de perfil -> ${C_BOLD}'My Profile'${C_RESET}."
-    echo -e "  3. En la columna izquierda haz clic en ${C_BOLD}'API Tokens'${C_RESET}."
-    echo -e "  4. ${C_GREEN}MÉTODO RECOMENDADO (Más fácil):${C_RESET}"
-    echo -e "     En la sección 'Global API Key', haz clic en ${C_BOLD}'View'${C_RESET}, pon tu contraseña y copia la clave."
-    echo -e "     Luego en el script seleccionas opción 1 (Global Key) e ingresas tu correo y esa clave."
-    echo -e "     ${C_GRAY}(El script guarda tus credenciales para que no tengas que escribirlas de nuevo).${C_RESET}\n"
-
-    echo -e "${C_BOLD}${C_YELLOW}5. NUBE NARANJA (PROXY CDN) VS NUBE GRIS (DNS DIRECTO)${C_RESET}"
-    echo -e "──────────────────────────────────────────────────────────────────────────"
-    echo -e "  • ${C_GREEN}Nube Naranja (Proxy: ON):${C_RESET} OBLIGATORIO para payloads HTTP Custom / WebSocket"
-    echo -e "    en puerto 80 con Bug Host. Cloudflare enmascara tu IP y distribuye el tráfico."
-    echo -e "  • ${C_GRAY}Nube Gris (DNS Only):${C_RESET} No usa CDN. Apunta directo a la IP de tu servidor."
-    echo -e "    Se usa solo para SSH directo (puerto 22) o juegos/BadVPN.\n"
-
-    echo -e "${C_BOLD}${C_YELLOW}6. ¿NO TIENES DOMINIO PROPIO? ALTERNATIVAS GRATUITAS${C_RESET}"
-    echo -e "──────────────────────────────────────────────────────────────────────────"
-    echo -e "  • ${C_CYAN}DuckDNS (Opción 2):${C_RESET} Regístrate gratis en duckdns.org con tu cuenta de Google."
-    echo -e "    Te da un subdominio gratis (ej: tunombre.duckdns.org) y el script lo actualiza solo."
-    echo -e "  • ${C_CYAN}sslip.io (Opción 3):${C_RESET} ¡Cero cuentas y cero esperas! Genera al instante un"
-    echo -e "    dominio válido internacionalmente que resuelve a tu IP pública en 1 clic."
+    echo -e "  • ${C_GREEN}Nube Naranja (Proxy: ON):${C_RESET} OBLIGATORIO si usas Payloads Split con Bug Host"
+    echo -e "    para que Cloudflare rutee el tráfico hacia tu VPS en puerto 80."
+    echo -e "  • ${C_GRAY}Nube Gris / Directo (sslip.io / DuckDNS):${C_RESET} Conecta directo a tu servidor."
+    echo -e "    El demonio ${C_BOLD}ssh-wsproxy${C_RESET} instalado en tu VPS recibe el WebSocket directo"
+    echo -e "    en el puerto 80 sin intermediarios, con menor latencia y cero costo."
     echo -e "──────────────────────────────────────────────────────────────────────────"
     press_enter
 }
@@ -849,28 +970,31 @@ main_menu() {
         echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
         echo -e " Host activo: ${dom_badge}"
         echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} Crear subdominio Cloudflare API (Detección automática de zonas)"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} Vincular dominio dinámico DuckDNS (Gratuito *.duckdns.org)"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} Generar dominio gratuito instantáneo (1-Click sslip.io)"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} Asignar / Cambiar dominio manualmente (Tu propio dominio)"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} Comprobar estado y diagnóstico DNS del dominio"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} Eliminar dominio actual y volver a IP pública"
-        echo -e "  ${C_CYAN}[7]${C_RESET} Guía paso a paso: ¿Cómo crear y configurar un dominio?"
-        echo -e "  ${C_YELLOW}[8]${C_RESET} Administrar / Borrar credenciales guardadas"
+        echo -e "  ${C_BOLD}${C_YELLOW}⭐ [1] ASISTENTE GUIADO PASO A PASO (100% GRATUITO - Cero Costo)${C_RESET}"
+        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_CYAN}[2]${C_RESET} Dominio Instantáneo 1-Click (sslip.io - Cero registro)"
+        echo -e "  ${C_CYAN}[3]${C_RESET} DuckDNS Personalizado (*.duckdns.org - Gratuito dinámico)"
+        echo -e "  ${C_CYAN}[4]${C_RESET} Cloudflare API (Plan Gratuito \$0 - Detección automática)"
+        echo -e "  ${C_YELLOW}[5]${C_RESET} Asignar / Cambiar dominio manualmente (Tu propio dominio)"
+        echo -e "  ${C_YELLOW}[6]${C_RESET} Comprobar estado y diagnóstico DNS del dominio"
+        echo -e "  ${C_YELLOW}[7]${C_RESET} Eliminar dominio actual y volver a IP pública"
+        echo -e "  ${C_YELLOW}[8]${C_RESET} Guía educativa: ¿Cómo funcionan los dominios gratuitos?"
+        echo -e "  ${C_YELLOW}[9]${C_RESET} Administrar / Borrar credenciales guardadas"
         echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"
         echo -e "${C_CYAN}──────────────────────────────────────────────────────────────────${C_RESET}"
         local opt_dom=""
-        read -r -p "Seleccione una opción [0-8]: " opt_dom || true
+        read -r -p "Seleccione una opción [0-9]: " opt_dom || true
 
         case "${opt_dom:-}" in
-            1) setup_cloudflare ;;
-            2) setup_duckdns ;;
-            3) setup_instant_domain ;;
-            4) setup_manual_domain ;;
-            5) check_dns_status ;;
-            6) delete_domain ;;
-            7) show_domain_guide ;;
-            8) manage_saved_credentials ;;
+            1) wizard_free_domains ;;
+            2) setup_instant_domain ;;
+            3) setup_duckdns ;;
+            4) setup_cloudflare ;;
+            5) setup_manual_domain ;;
+            6) check_dns_status ;;
+            7) delete_domain ;;
+            8) show_domain_guide ;;
+            9) manage_saved_credentials ;;
             0) break ;;
             *)
                 echo -e "${C_RED}Opción inválida.${C_RESET}"
@@ -881,6 +1005,9 @@ main_menu() {
 }
 
 case "${1:-}" in
+    --wizard|-w)
+        wizard_free_domains
+        ;;
     --show)
         cur=$(get_current_domain)
         if [[ -n "$cur" ]]; then
@@ -908,6 +1035,7 @@ case "${1:-}" in
         i_dash="${v_ip//./-}"
         inst_dom="vps-${i_dash}.sslip.io"
         save_domain "$inst_dom"
+        show_httpcustom_card "$inst_dom" "$v_ip" "direct"
         ;;
     --guide)
         show_domain_guide
