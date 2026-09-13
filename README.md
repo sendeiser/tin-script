@@ -59,7 +59,7 @@ sudo menu
  S.O.: Ubuntu 22.04 LTS (x86_64)     Host: vps1.martinvps.online  IP: 198.51.100.24
  Uptime: 14d 6h 32m                  Disco /: 5.8G/25G (24%)
  RAM: [████░░░░░░] 480MB / 2048MB (23%)    CPU: 1.2%
- Versión: [v1.8.0 - ACTUALIZADO]
+ Versión: [v1.8.1 - ACTUALIZADO]
 ──────────────────────────────────────────────────────────────────────────────
  SERVICIOS:  SSH: [ONLINE]  Dropbear: [ONLINE]  WS(80): [ONLINE]  Limitador: [ONLINE]
  CUENTAS:    Total: 12     |  Online: 5     |  Expiradas: 1
@@ -181,18 +181,20 @@ IP_VPS:PUERTO@USUARIO:CONTRASEÑA
    - **Password:** Contraseña del usuario.
 5. Regresa y pulsa **CONNECT**. En la pestaña **LOG** verás: `HTTP Custom: Connected`.
 
-### 3. Ficha Automática para Enviar a Clientes (WhatsApp / Telegram)
-Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automáticamente una ficha lista para copiar:
+### 3. Ficha Automática para Enviar a Clientes (Móvil / Mensajes)
+Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automáticamente una ficha lista para copiar y enviar:
 ```text
 🚀 *DATOS DE TU CUENTA SSH / HTTP CUSTOM*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌐 *Host / IP:* 198.51.100.24
 🚪 *Puertos Dropbear:* 143, 90, 109 (Recomendados)
+🚪 *Puerto WebSocket Proxy:* 80 (Para Payloads / CDN Cloudflare)
 🚪 *Puerto OpenSSH:* 22
 👤 *Usuario:* juan
 🔑 *Contraseña:* clave123
-📅 *Vencimiento:* 2026-10-12 (30 días)
+📅 *Vencimiento:* 2026-10-12
 📱 *Límite de Conexiones:* 2 dispositivo(s)
+📞 *Contacto / Soporte:* 3826432180
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ *Formato Rápido de Importación en HTTP Custom:*
 198.51.100.24:143@juan:clave123
@@ -205,24 +207,27 @@ Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automát
 
 ---
 
-## 🎨 Gestor de Banners y Mensajes de Bienvenida (Apps & SSH)
+## 🎨 Gestor de Banners Optimizados para Celulares (Apps & SSH)
 
-El sistema incluye un módulo completo de **Banners y Mensajes Informativos** que se muestran automáticamente a tus usuarios al conectarse desde aplicaciones como **HTTP Custom, HTTP Injector, NapsternetV** o terminales SSH:
+El sistema incluye un módulo completo de **Banners y Mensajes Informativos 100% Optimizados para Pantallas Móviles** (ancho de 41 caracteres exactos para evitar que los marcos se rompan o desborden en aplicaciones como **HTTP Custom, HTTP Injector, NapsternetV** o clientes SSH de Android):
 
 ### 1. Funcionalidades del Módulo de Banners:
-- **Banner Pre-Auth en Apps:** Se muestra en el registro (log) de conexión de HTTP Custom nada más pulsar *Connect*.
-- **Plantillas Estilizadas Prediseñadas:**
-  - `[1] ⚡ Neon Cyberpunk (Hacker Pro)`: Bordes dobles, etiquetas de estado y reglas anti-abuso.
-  - `[2] ★ VIP Gold Premium (Elegante)`: Enfoque comercial con estrellas doradas y canales de contacto.
-  - `[3] 🔹 Clean Minimalist`: Diseño compacto y de alta legibilidad.
-  - `[4] 🎮 Gaming & Low Latency`: Enfocado en optimización para juegos online y ping bajo.
+- **Banner Pre-Auth en Apps (Ancho 41 cols):** Se muestra perfectamente encuadrado en el registro (log) de conexión de HTTP Custom nada más pulsar *Connect*.
+- **Plantillas Estilizadas Móviles (41 columnas):**
+  - `[1] ⚡ Neon Cyber Móvil (Hacker Pro)`: Bordes dobles compactos, estado online, reglas de bloqueo y teléfono.
+  - `[2] ★ VIP Gold Móvil (Elegante)`: Enfoque comercial con estrellas doradas y contacto oficial.
+  - `[3] 🔹 Clean Minimal Móvil`: Diseño compacto y de máxima legibilidad en cualquier smartphone.
+  - `[4] 🎮 Gaming & Low-Lag Móvil`: Optimizado para juegos online (Free Fire/PUBG/COD) y ping bajo.
   - `[5] 📝 Editor Libre`: Editor manual para escribir tu propio diseño.
-- **Banner Dinámico de Sesión de Usuario (Login / MOTD):**
+- **Banner Dinámico de Sesión de Usuario (Login / SSH Móvil):**
   Calcula y muestra en tiempo real al conectarse el usuario:
-  - 👤 Nombre de usuario
-  - 📅 Fecha de expiración y **días restantes exactos**
-  - 📱 Cuota de conexiones activas (ej: `1 de 2 permitidos`)
-  - 🚀 Estado del servidor y soporte
+  - 👤 **Nombre de usuario:** `$USER`
+  - 📅 **Fecha de vencimiento y días restantes:** Formateado automáticamente
+  - 📱 **Cuota de conexiones activas:** `X de Y dispositivos permitidos`
+  - 🚀 **Estado de la cuenta:** `ACTIVO Y OPTIMIZADO`
+  - 🕒 **Fecha y hora del servidor:** En tiempo real (`DD/MM/AAAA HH:MM`)
+  - 📞 **Contacto / Soporte:** `3826432180` (Sin redes sociales)
+  - ⚠️ **Reglas de seguridad:** Prohibición de Torrent, Spam y Multi-Login
 
 ### 2. Comandos Rápidos:
 ```bash
@@ -231,7 +236,7 @@ banner
 # O también:
 ssh-banner
 
-# Previsualizar el banner actual:
+# Previsualizar el banner actual en vista móvil:
 banner --preview
 
 # Activar plantilla rápidamente (1 a 4):

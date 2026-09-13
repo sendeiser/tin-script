@@ -63,7 +63,7 @@ get_dropbear_ports() {
 }
 
 # ------------------------------------------------------------------------------
-# Generador de Ficha de Cliente para WhatsApp / Telegram / Portapapeles
+# Generador de Ficha de Cliente para Móvil / Mensajes / Portapapeles
 # ------------------------------------------------------------------------------
 show_client_card() {
     local user="$1"
@@ -110,6 +110,7 @@ show_client_card() {
     echo -e "🔑 *Contraseña:* \`${pass}\`"
     echo -e "📅 *Vencimiento:* \`${exp_date}\`"
     echo -e "📱 *Límite de Conexiones:* \`${limit_conn} dispositivo(s)\`"
+    echo -e "📞 *Contacto / Soporte:* \`3826432180\`"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "⚡ *Formato Rápido de Importación en HTTP Custom:*"
     echo -e "\`${host_conn}:143@${user}:${pass}\`"
@@ -444,7 +445,7 @@ while true; do
     echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}"
     echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_BOLD}Asistente Guiado:${C_RESET} Configurar WebSocket CDN + Bug Host (Puerto 80)"
     echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_BOLD}Alternativas a Cloudflare${C_RESET} (Directo, SSL SNI, Fastly, Gcore)"
-    echo -e "  ${C_YELLOW}[3]${C_RESET} Generar Ficha de Cliente para un usuario (WhatsApp/Telegram)"
+    echo -e "  ${C_YELLOW}[3]${C_RESET} Generar Ficha de Cliente para un usuario (Móvil / Copiar Ficha)"
     echo -e "  ${C_YELLOW}[4]${C_RESET} Tutorial y Guía Paso a Paso de Conexión en HTTP Custom"
     echo -e "  ${C_YELLOW}[5]${C_RESET} Catálogo de Payloads Populares recomendados"
     echo -e "  ${C_RED}[0]${C_RESET} Volver al Menú Principal"

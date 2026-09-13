@@ -48,7 +48,7 @@ press_enter() {
 load_banner_conf() {
     BANNER_ENABLED="true"
     SERVER_NAME="SupraVPS"
-    CONTACT_INFO="@Soporte_Telegram"
+    CONTACT_INFO="3826432180"
     CUSTOM_RULES="Prohibido Torrent, SPAM, DDoS y Multi-Login no autorizado"
     DYNAMIC_LOGIN_BANNER="true"
     TEMPLATE_ID="1"
@@ -73,7 +73,7 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
-# Generador de Plantillas Pre-Auth (Para HTTP Custom, Dropbear y OpenSSH)
+# Generador de Plantillas Pre-Auth (Optimizado para Celulares / HTTP Custom)
 # ------------------------------------------------------------------------------
 generate_banner_text() {
     local t_id="${1:-$TEMPLATE_ID}"
@@ -83,65 +83,65 @@ generate_banner_text() {
 
     case "$t_id" in
         1)
-            # Cyberpunk Neon
+            # Neon Cyber Móvil (Ancho 41 cols)
             cat <<EOF
-╔══════════════════════════════════════════════════════════════╗
-║               ⚡ ${s_name} - HIGH SPEED SSH ⚡                ║
-╚══════════════════════════════════════════════════════════════╝
- ● Servidor:     ${s_name} (CDN WebSocket & Direct SSH)
- ● Estado:       ONLINE ● Conexión Segura y Cifrada
- ● Soporte:      ${c_info}
-────────────────────────────────────────────────────────────────
- [ REGLAS OBLIGATORIAS DE USO ]
- ✖ PROHIBIDO TORRENT / P2P / BITTORENT (Bloqueo permanente)
- ✖ PROHIBIDO ATAQUES DDOS / SPAM / CARDING
- ✖ PROHIBIDO EXCEDER EL LÍMITE DE DISPOSITIVOS CONTRATADOS
-────────────────────────────────────────────────────────────────
- ★ ¡Gracias por tu preferencia! Conexión Estable y Veloz ★
-════════════════════════════════════════════════════════════════
+╔═══════════════════════════════════════╗
+║       ⚡ ${s_name} - HIGH SPEED ⚡       ║
+╚═══════════════════════════════════════╝
+ ● Servidor : ${s_name} (CDN / SSH)
+ ● Estado   : ONLINE (Conexión Activa)
+ ● Soporte  : ${c_info}
+─────────────────────────────────────────
+ [ REGLAS DE USO OBLIGATORIAS ]
+ ✖ Prohibido Torrent / P2P / Bitorrent
+ ✖ Prohibido Spam / Carding / DDoS
+ ✖ Respete el límite de dispositivos
+─────────────────────────────────────────
+ ★ Conexión Estable y de Alta Calidad ★
+═════════════════════════════════════════
 EOF
             ;;
         2)
-            # VIP Gold Premium
+            # VIP Gold Móvil (Ancho 41 cols)
             cat <<EOF
-╔══════════════════════════════════════════════════════════════╗
-║            ★ ★ ★ ${s_name} VIP NETWORK ★ ★ ★           ║
-╚══════════════════════════════════════════════════════════════╝
- 👑 ¡Bienvenido a tu conexión VIP de Ultra Alta Velocidad!
- 🌐 Red Premium con Aceleración TCP y Protección Anti-DDoS.
+╔═══════════════════════════════════════╗
+║       ★ ★ ★ ${s_name} VIP ★ ★ ★       ║
+╚═══════════════════════════════════════╝
+ 👑 Conexión VIP de Ultra Alta Velocidad
+ 🌐 Servidor Privado Cifrado y Seguro
 
- 📌 Soporte y Renovaciones: ${c_info}
- 💬 Contacto Oficial:       ${c_info}
+ 📌 Soporte Oficial : ${c_info}
+ ⚡ Estado          : ONLINE ● ACTIVO
 
  ⚠️ Reglas del Servicio:
-    - ${rules}
-    - Respetar el límite de conexiones simultáneas.
-════════════════════════════════════════════════════════════════
+  • Prohibido descargas Torrent / P2P
+  • Respetar límite de conexiones
+═════════════════════════════════════════
 EOF
             ;;
         3)
-            # Clean Minimalist
+            # Clean Minimal Móvil (Ancho 41 cols)
             cat <<EOF
-┌──────────────────────────────────────────────────────────────┐
-│ ${s_name} :: Secure SSH & WebSocket Tunnel Gateway           │
-└──────────────────────────────────────────────────────────────┘
-  Status: Online ● Latencia: Ultra-Baja ● CDN Activo
+┌───────────────────────────────────────┐
+│ ${s_name} :: Secure SSH Gateway       │
+└───────────────────────────────────────┘
+  Estado : Online ● Latencia Ultra-Baja
   Soporte: ${c_info}
-  Reglas: ${rules}
-────────────────────────────────────────────────────────────────
+  Reglas : ${rules}
+─────────────────────────────────────────
 EOF
             ;;
         4)
-            # Gaming & Streaming
+            # Gaming & Low-Lag Móvil (Ancho 41 cols)
             cat <<EOF
-╔══════════════════════════════════════════════════════════════╗
-║           🎮 ${s_name} GAMING & STREAMING PRO 🎮            ║
-╚══════════════════════════════════════════════════════════════╝
- ⚡ Optimizado para Free Fire, PUBG, Call of Duty, YouTube 4K.
- 🚀 Acelerador TCP BBR Activado (Ping Mínimo y Cero Jitter).
- 🎧 Soporte Técnico: ${c_info}
- 🚫 Cero tolerancia: ${rules}
-════════════════════════════════════════════════════════════════
+╔═══════════════════════════════════════╗
+║     🎮 ${s_name} GAMING PRO 🎮        ║
+╚═══════════════════════════════════════╝
+ ⚡ Optimizado Juegos y Streaming 4K
+ 🚀 TCP BBR (Ping Mínimo y Cero Lag)
+ 📞 Soporte Técnico: ${c_info}
+ 🚫 Cero Tolerancia: ${rules}
+═════════════════════════════════════════
 EOF
             ;;
         *)
@@ -214,10 +214,11 @@ apply_banner_system() {
     if [[ "$DYNAMIC_LOGIN_BANNER" == "true" ]]; then
         cat > "$PROFILE_BANNER" <<'EOF'
 # ==============================================================================
-# vps-ssh-limiter: Banner dinámico de sesión de usuario
+# vps-ssh-limiter: Banner dinámico de sesión de usuario (Optimizado para Móviles)
 # ==============================================================================
 if [[ -n "$USER" && "$USER" != "root" && -t 1 ]]; then
     _now_epoch=$(date +%s)
+    _now_date=$(date '+%d/%m/%Y %H:%M')
     _exp_date="Sin exp."
     _days_left="Ilimitado"
     _limit="1"
@@ -251,23 +252,27 @@ if [[ -n "$USER" && "$USER" != "root" && -t 1 ]]; then
     _conns=$(( _s_pids + _d_pids ))
 
     _sname="SupraVPS"
+    _contact="3826432180"
     if [[ -f /etc/vps-ssh-limiter/banner.conf ]]; then
         # shellcheck disable=SC1091
         source /etc/vps-ssh-limiter/banner.conf 2>/dev/null || true
         _sname="${SERVER_NAME:-SupraVPS}"
+        _contact="${CONTACT_INFO:-3826432180}"
     fi
 
-    echo -e "\033[1;36m╔══════════════════════════════════════════════════════════════════╗\033[0m"
-    echo -e "\033[1;36m║\033[0m \033[1;37m★ BIENVENIDO A ${_sname} - INFORMACIÓN DE TU CUENTA ★\033[0m        \033[1;36m║\033[0m"
-    echo -e "\033[1;36m╚══════════════════════════════════════════════════════════════════╝\033[0m"
-    echo -e "  \033[1;33m👤 Usuario:\033[0m          \033[1;37m${USER}\033[0m"
-    echo -e "  \033[1;33m📅 Vencimiento:\033[0m      \033[1;32m${_exp_date}\033[0m (Restante: \033[1;36m${_days_left}\033[0m)"
-    echo -e "  \033[1;33m📱 Dispositivos:\033[0m     \033[1;35m${_conns} de ${_limit} permitidos\033[0m"
-    echo -e "  \033[1;33m🚀 Estado:\033[0m           \033[1;32mConectado y Optimizado\033[0m"
-    if [[ -n "${CONTACT_INFO:-}" ]]; then
-        echo -e "  \033[1;33m📞 Soporte:\033[0m          \033[1;37m${CONTACT_INFO}\033[0m"
-    fi
-    echo -e "\033[0;90m──────────────────────────────────────────────────────────────────\033[0m"
+    echo -e "\033[1;36m╔═══════════════════════════════════════╗\033[0m"
+    echo -e "\033[1;36m║\033[0m     \033[1;37m★ INFORMACIÓN DE TU CUENTA ★\033[0m      \033[1;36m║\033[0m"
+    echo -e "\033[1;36m╚═══════════════════════════════════════╝\033[0m"
+    echo -e "  \033[1;33m👤 Usuario     :\033[0m \033[1;37m${USER}\033[0m"
+    echo -e "  \033[1;33m📅 Vencimiento :\033[0m \033[1;32m${_exp_date}\033[0m"
+    echo -e "  \033[1;33m⏳ Días rest.  :\033[0m \033[1;36m${_days_left}\033[0m"
+    echo -e "  \033[1;33m📱 Conexiones  :\033[0m \033[1;35m${_conns} de ${_limit} permitidos\033[0m"
+    echo -e "  \033[1;33m🚀 Estado      :\033[0m \033[1;32mACTIVO Y OPTIMIZADO\033[0m"
+    echo -e "  \033[1;33m🕒 Fecha / Hora:\033[0m \033[1;37m${_now_date}\033[0m"
+    echo -e "  \033[1;33m📞 Contacto    :\033[0m \033[1;37m${_contact}\033[0m"
+    echo -e "\033[0;90m─────────────────────────────────────────\033[0m"
+    echo -e " \033[1;31m⚠️  Prohibido Torrent, Spam y Multi-Login\033[0m"
+    echo -e "\033[0;90m─────────────────────────────────────────\033[0m"
 fi
 EOF
         chmod 644 "$PROFILE_BANNER"
@@ -284,12 +289,12 @@ EOF
 preview_banner() {
     load_banner_conf
     clear
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}           PREVISUALIZACIÓN DEL BANNER (VISTA HTTP CUSTOM)            ${C_RESET}${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${C_RESET}\n"
+    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}        PREVISUALIZACIÓN DEL BANNER (VISTA CELULAR / APP)       ${C_RESET}${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "${C_GRAY}Así es exactamente como verán el mensaje tus usuarios en el registro de la app:${C_RESET}\n"
-    echo -e "${C_BOLD}${C_WHITE}┌──────────────────────── REGISTRO HTTP CUSTOM ────────────────────────┐${C_RESET}"
+    echo -e "${C_GRAY}Así es exactamente como verán el mensaje tus usuarios en su teléfono:${C_RESET}\n"
+    echo -e "${C_BOLD}${C_WHITE}┌─────────── REGISTRO HTTP CUSTOM (MÓVIL) ──────────┐${C_RESET}"
     if [[ -f "$BANNER_FILE" && -s "$BANNER_FILE" ]]; then
         while IFS= read -r line || [[ -n "$line" ]]; do
             echo -e "│ ${C_YELLOW}${line}${C_RESET}"
@@ -297,17 +302,25 @@ preview_banner() {
     else
         echo -e "│ ${C_GRAY}(El banner se encuentra vacío o desactivado)${C_RESET}"
     fi
-    echo -e "${C_BOLD}${C_WHITE}└──────────────────────────────────────────────────────────────────────┘${C_RESET}\n"
+    echo -e "${C_BOLD}${C_WHITE}└───────────────────────────────────────────────────┘${C_RESET}\n"
 
     if [[ "$DYNAMIC_LOGIN_BANNER" == "true" ]]; then
-        echo -e "${C_BOLD}${C_CYAN}★ Vista Previa del Banner Dinámico de Usuario (Login/Terminal):${C_RESET}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_YELLOW}👤 Usuario:${C_RESET}          ${C_BOLD}cliente_demo${C_RESET}"
-        echo -e "  ${C_YELLOW}📅 Vencimiento:${C_RESET}      ${C_GREEN}2026-10-15${C_RESET} (Restante: ${C_CYAN}30 día(s)${C_RESET})"
-        echo -e "  ${C_YELLOW}📱 Dispositivos:${C_RESET}     ${C_MAGENTA}1 de 2 permitidos${C_RESET}"
-        echo -e "  ${C_YELLOW}🚀 Estado:${C_RESET}           ${C_GREEN}Conectado y Optimizado${C_RESET}"
-        echo -e "  ${C_YELLOW}📞 Soporte:${C_RESET}          ${C_WHITE}${CONTACT_INFO}${C_RESET}"
-        echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────${C_RESET}"
+        local now_d
+        now_d=$(date '+%d/%m/%Y %H:%M')
+        echo -e "${C_BOLD}${C_CYAN}★ Vista Previa del Banner Dinámico de Cuenta (Celular / SSH):${C_RESET}"
+        echo -e "${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║${C_RESET}     ${C_WHITE}${C_BOLD}★ INFORMACIÓN DE TU CUENTA ★${C_RESET}      ${C_CYAN}║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}👤 Usuario     :${C_RESET} ${C_BOLD}cliente_demo${C_RESET}"
+        echo -e "  ${C_YELLOW}📅 Vencimiento :${C_RESET} ${C_GREEN}2026-10-15${C_RESET}"
+        echo -e "  ${C_YELLOW}⏳ Días rest.  :${C_RESET} ${C_CYAN}30 día(s)${C_RESET}"
+        echo -e "  ${C_YELLOW}📱 Conexiones  :${C_RESET} ${C_MAGENTA}1 de 2 permitidos${C_RESET}"
+        echo -e "  ${C_YELLOW}🚀 Estado      :${C_RESET} ${C_GREEN}ACTIVO Y OPTIMIZADO${C_RESET}"
+        echo -e "  ${C_YELLOW}🕒 Fecha / Hora:${C_RESET} ${C_WHITE}${now_d}${C_RESET}"
+        echo -e "  ${C_YELLOW}📞 Contacto    :${C_RESET} ${C_BOLD}${C_WHITE}${CONTACT_INFO}${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
+        echo -e " ${C_RED}⚠️  Prohibido Torrent, Spam y Multi-Login${C_RESET}"
+        echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
     fi
 
     press_enter
@@ -320,16 +333,16 @@ select_template() {
     load_banner_conf
     clear
     echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}              SELECCIONAR PLANTILLA DE BANNER                  ${C_RESET}${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}         SELECCIONAR PLANTILLA OPTIMIZADA PARA MÓVIL            ${C_RESET}${C_CYAN}║${C_RESET}"
     echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════╝${C_RESET}\n"
 
-    echo -e "  ${C_YELLOW}[1] ⚡ Neon Cyberpunk (Hacker Pro)${C_RESET}"
-    echo -e "      • Bordes dobles, etiquetas de estado, reglas de bloqueo, Telegram."
-    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Premium (Elegante y Comercial)${C_RESET}"
-    echo -e "      • Estrellas VIP, mensaje cordial, contacto oficial, alta calidad."
-    echo -e "  ${C_YELLOW}[3] 🔹 Clean Minimalist (Moderno y Compacto)${C_RESET}"
+    echo -e "  ${C_YELLOW}[1] ⚡ Neon Cyber Móvil (Hacker Pro - 41 cols)${C_RESET}"
+    echo -e "      • Cuadro compacto, estado online, reglas de bloqueo y teléfono."
+    echo -e "  ${C_YELLOW}[2] ★ VIP Gold Móvil (Elegante y Comercial - 41 cols)${C_RESET}"
+    echo -e "      • Estrellas VIP, mensaje cordial, contacto telefónico oficial."
+    echo -e "  ${C_YELLOW}[3] 🔹 Clean Minimal Móvil (Compacto y Ultra-Limpio - 41 cols)${C_RESET}"
     echo -e "      • Diseño súper limpio, sin sobrecargar los logs de la app."
-    echo -e "  ${C_YELLOW}[4] 🎮 Gaming & Low Latency (Gamer Pro)${C_RESET}"
+    echo -e "  ${C_YELLOW}[4] 🎮 Gaming & Low-Lag Móvil (Gamer Pro - 41 cols)${C_RESET}"
     echo -e "      • Enfoque en juegos (Free Fire/PUBG/COD), TCP BBR y anti-lag."
     echo -e "  ${C_RED}[0] Cancelar${C_RESET}\n"
 
@@ -356,13 +369,13 @@ customize_data() {
 
     echo -e "Valores actuales:"
     echo -e "  • ${C_BOLD}Nombre del Servidor:${C_RESET} ${C_CYAN}${SERVER_NAME}${C_RESET}"
-    echo -e "  • ${C_BOLD}Contacto / Soporte:${C_RESET}  ${C_GREEN}${CONTACT_INFO}${C_RESET}"
+    echo -e "  • ${C_BOLD}Número de Celular:${C_RESET}   ${C_GREEN}${CONTACT_INFO}${C_RESET}"
     echo -e "  • ${C_BOLD}Reglas de Uso:${C_RESET}       ${C_YELLOW}${CUSTOM_RULES}${C_RESET}\n"
     echo -e "${C_GRAY}(Presiona [Enter] en cualquier campo para mantener el valor actual)${C_RESET}\n"
 
     local in_name="" in_contact="" in_rules=""
     read -r -p "Nuevo nombre de servidor [${SERVER_NAME}]: " in_name || true
-    read -r -p "Nuevo contacto/soporte [${CONTACT_INFO}]: " in_contact || true
+    read -r -p "Número de celular/soporte [${CONTACT_INFO}]: " in_contact || true
     read -r -p "Nuevas reglas de uso [${CUSTOM_RULES}]: " in_rules || true
 
     if [[ -n "${in_name:-}" ]]; then SERVER_NAME="$in_name"; fi
@@ -452,11 +465,11 @@ main_banner_menu() {
             d_status="${C_RED}[DESACTIVADO]${C_RESET}"
         fi
 
-        local t_label="Cyberpunk Neon"
+        local t_label="Cyberpunk Neon (Móvil)"
         case "$TEMPLATE_ID" in
-            2) t_label="VIP Gold Premium" ;;
-            3) t_label="Clean Minimalist" ;;
-            4) t_label="Gaming Pro" ;;
+            2) t_label="VIP Gold (Móvil)" ;;
+            3) t_label="Clean Minimal (Móvil)" ;;
+            4) t_label="Gaming Pro (Móvil)" ;;
             5) t_label="Personalizado" ;;
         esac
 
