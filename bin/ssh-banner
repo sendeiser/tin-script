@@ -324,6 +324,26 @@ refresh_user_banners() {
             fi
         fi
     done < /etc/passwd
+
+    # Si algún usuario activo no tiene su bloque Match User en sshd_config, sincronizar automáticamente
+    local sshd_cfg="/etc/ssh/sshd_config"
+    if [[ -f "$sshd_cfg" ]]; then
+        local missing_match=false
+        while IFS=: read -r u _ uid _ gecos _ msh; do
+            if [[ $uid -ge 1000 && "$u" != "nobody" && "$u" != "nogroup" ]]; then
+                if [[ "$u" == "ubuntu" || "$u" == "debian" || "$u" == "root" || "$u" == "admin" || "$u" == "centos" || "$u" == "cloud-user" || "$u" == "systemd-"* || "$u" == "nobody"* ]]; then
+                    continue
+                fi
+                if ! grep -q "Match User ${u}" "$sshd_cfg" 2>/dev/null; then
+                    missing_match=true
+                    break
+                fi
+            fi
+        done < /etc/passwd
+        if [[ "$missing_match" == "true" ]]; then
+            apply_banner_system >/dev/null 2>&1 || true
+        fi
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -405,6 +425,9 @@ apply_banner_system() {
     fi
 
     # Liberar puerto 143 de procesos zombies o remanentes de Dropbear
+    systemctl stop dropbear.socket 2>/dev/null || true
+    systemctl disable dropbear.socket 2>/dev/null || true
+    pkill -9 -f "dropbear.*143" 2>/dev/null || true
     if command -v fuser >/dev/null 2>&1; then
         fuser -k 143/tcp 2>/dev/null || true
     fi
@@ -412,11 +435,11 @@ apply_banner_system() {
     # 2. Configurar OpenSSH con banners específicos por usuario (Match User)
     local sshd_cfg="/etc/ssh/sshd_config"
     if [[ -f "$sshd_cfg" ]]; then
-        # Asegurar directiva Banner global al inicio para conexiones generales
+        # Asegurar directiva Banner global como 'none' para que el Match User individual tenga prioridad absoluta
         if grep -q "^#\?Banner" "$sshd_cfg"; then
-            sed -i "s|^#\?Banner.*|Banner ${BANNER_FILE}|g" "$sshd_cfg"
+            sed -i "s|^#\?Banner.*|Banner none|g" "$sshd_cfg"
         else
-            sed -i "1s|^|Banner ${BANNER_FILE}\n|" "$sshd_cfg"
+            sed -i "1s|^|Banner none\n|" "$sshd_cfg"
         fi
 
         # Asegurar puertos 22 y 143 para OpenSSH con banners individuales
@@ -441,12 +464,12 @@ apply_banner_system() {
 
         # Anular configuraciones restrictivas de proveedores cloud en /etc/ssh/sshd_config.d/
         mkdir -p /etc/ssh/sshd_config.d
+        sed -i '/KbdInteractiveAuthentication/d' /etc/ssh/sshd_config.d/*.conf "$sshd_cfg" 2>/dev/null || true
         sed -i 's|^PasswordAuthentication\s\+no|PasswordAuthentication yes|g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
         cat > /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf <<'EOF_SSHD'
 Port 22
 Port 143
 PasswordAuthentication yes
-KbdInteractiveAuthentication yes
 UsePAM yes
 PermitEmptyPasswords no
 AllowTcpForwarding yes
@@ -462,7 +485,7 @@ EOF_SSHD
         fi
 
         # Si el banner está activado, añadir bloques Match User por cuenta (excluyendo admin VPS)
-        # IMPORTANTE: No incluir TCPKeepAlive dentro del bloque Match (sintaxis ilegal en Match de OpenSSH)
+        # Se incluye únicamente 'Banner' dentro de Match User para compatibilidad universal con cualquier versión de OpenSSH
         if [[ "$BANNER_ENABLED" == "true" ]]; then
             {
                 echo "# BEGIN VPS-SSH-LIMITER USER BANNERS"
@@ -474,26 +497,28 @@ EOF_SSHD
                         if [[ -f "${CONFIG_DIR}/banners/${u}.net" ]]; then
                             echo "Match User ${u}"
                             echo "    Banner ${CONFIG_DIR}/banners/${u}.net"
-                            echo "    PasswordAuthentication yes"
-                            echo "    AllowTcpForwarding yes"
-                            echo "    ClientAliveInterval 30"
-                            echo "    ClientAliveCountMax 3"
                         fi
                     fi
                 done < /etc/passwd
+                echo "Match all"
+                echo "    Banner ${BANNER_FILE}"
                 echo "# END VPS-SSH-LIMITER USER BANNERS"
             } >> "$sshd_cfg"
         fi
 
         # Validar sintaxis con sshd -t antes de recargar
         if command -v sshd >/dev/null 2>&1; then
-            if sshd -t 2>/dev/null; then
-                systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
-            else
-                # Si falló la sintaxis, revertir bloque Match
-                sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
-                systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+            local sshd_err=""
+            if ! sshd_err=$(sshd -t 2>&1); then
+                # Si falló por 01-vps-ssh-limiter.conf, remover archivo y reintentar
+                if echo "$sshd_err" | grep -q "01-vps-ssh-limiter.conf"; then
+                    rm -f /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf
+                fi
+                if ! sshd -t 2>/dev/null; then
+                    sed -i '/# BEGIN VPS-SSH-LIMITER USER BANNERS/,/# END VPS-SSH-LIMITER USER BANNERS/d' "$sshd_cfg"
+                fi
             fi
+            systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
         fi
     fi
 

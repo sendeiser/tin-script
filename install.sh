@@ -179,6 +179,7 @@ systemctl restart dropbear 2>/dev/null || /etc/init.d/dropbear restart 2>/dev/nu
 log_success "Dropbear configurado y activo en puertos 90 y 109."
 
 # Liberar puerto 143 de procesos zombies o remanentes de Dropbear
+pkill -9 -f "dropbear.*143" 2>/dev/null || true
 if command -v fuser >/dev/null 2>&1; then
     fuser -k 143/tcp 2>/dev/null || true
 fi
@@ -208,12 +209,12 @@ fi
 
 # Anular directivas restrictivas de proveedores de nube (como 50-cloud-init.conf)
 mkdir -p /etc/ssh/sshd_config.d
+sed -i '/KbdInteractiveAuthentication/d' /etc/ssh/sshd_config.d/*.conf /etc/ssh/sshd_config 2>/dev/null || true
 sed -i 's|^PasswordAuthentication\s\+no|PasswordAuthentication yes|g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
 cat > /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf <<'EOF'
 Port 22
 Port 143
 PasswordAuthentication yes
-KbdInteractiveAuthentication yes
 UsePAM yes
 PermitEmptyPasswords no
 AllowTcpForwarding yes
@@ -224,9 +225,13 @@ ClientAliveCountMax 3
 EOF
 
 if command -v sshd >/dev/null 2>&1; then
-    if sshd -t 2>/dev/null; then
-        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+    local_err=""
+    if ! local_err=$(sshd -t 2>&1); then
+        if echo "$local_err" | grep -q "01-vps-ssh-limiter.conf"; then
+            rm -f /etc/ssh/sshd_config.d/01-vps-ssh-limiter.conf
+        fi
     fi
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
 fi
 
 # ------------------------------------------------------------------------------
@@ -299,7 +304,7 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "1.9.9" > /etc/vps-ssh-limiter/version
+echo "2.0.0" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]] || grep -q "TARGET_PORT=143" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'
