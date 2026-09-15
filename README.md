@@ -53,49 +53,30 @@ sudo menu
 ```
 *(También puedes usar los atajos `sudo tin` o `sudo vps`)*
 
-### Vista Previa del Dashboard (v2.1.0 - "Se Ve Todo"):
+### Vista Previa del Dashboard (v2.1.0 - Minimalista Compacto):
 ```text
-  ꧁࿇ VPS-SSH-LIMITER MANAGER ࿇꧂ 
-
- ╭═══════════════════════════════════════════════════════════╮
- │    Welcome to VPS-SSH-LIMITER by Martin Scripts / Tin     │
- ╰═══════════════════════════════════════════════════════════╯
- ╭═══════════════════════════════════════════════════════════╮
- │ ● SYSTEM OS    = Ubuntu 22.04.5 LTS (x86_64)              │
- │ ● SYSTEM CORE  = 2 Cores                                  │
- │ ● SERVER RAM   = 957 / 2048 MB (46%)                      │
- │ ● LOADCPU      = 2 %                                      │
- │ ● DATE & TIME  = 15-09-2026 16:55:00                      │
- │ ● UPTIME       = 5 days, 12 hours                         │
- │ ● IP VPS       = 157.245.62.32                            │
- │ ● DOMAIN       = tu-dominio.com                           │
- ╰═══════════════════════════════════════════════════════════╯
-                  >>> INFORMATION ACCOUNT <<<                  
-         ═════════════════════════════════════════════         
-               SSH / OPENSSH     = 10 Cuentas
-               DROPBEAR / WS     = 5 Cuentas
-               ONLINE SESSIONS   = 3 Activas
-               EXPIRED USERS     = 1 Expirada
-               TOTAL TRAFFIC     = 2.45 GB Transferidos
-         ═════════════════════════════════════════════         
-             >>> github.com/sendeiser/tin-script <<<             
- ╭══════════════┬══════════════┬══════════════┬══════════════╮
- │ SSH     [ON] │ DROPBEAR [ON] │ WS PROXY [ON] │ UDPGW   [ON] │
+ ╭───────────────────────────────────────────────────────────╮
+ │  ⚡ TIN SCRIPTS • VPS MANAGER             v2.1.0 [ONLINE]  │
+ ├─────────────────────────────┬─────────────────────────────┤
+ │ OS     : Ubuntu 22.04 LTS   │ IP     : 157.245.62.32      │
+ │ Host   : tu-dominio.com     │ Uptime : 5d 12h 30m         │
+ │ RAM    : 957/2048 MB (46%)  │ Cuentas: 10 Tot (3 On)      │
+ │ CPU    : 2 % (2 Cores)      │ Tráfico: 2.45 GB            │
+ ╰─────────────────────────────┴─────────────────────────────╯
+ ╭──────────────┬──────────────┬──────────────┬──────────────╮
+ │ SSH      [ON]│ DROPBEAR [ON]│ WS-80    [ON]│ UDPGW    [ON]│
  ├──────────────┼──────────────┼──────────────┼──────────────┤
- │ LIMITER [ON] │ TUNNEL  [ON] │ FAIL2BAN [ON] │ CRON    [ON] │
- ╰══════════════┴══════════════┴══════════════┴══════════════╯
- ╭═══════════════════┬═══════════════════┬═══════════════════╮
- │ [01] USUARIOS SSH │ [06] BANNERS/TEXTO │ [11] CAMBIAR DOMIN │
- │ [02] CREAR TRIAL  │ [07] REINICIAR TODO │ [12] TEST VELOCIDAD │
- │ [03] UDPGW 7300   │ [08] LIMITADOR SSH │ [13] ACTUALIZAR VPS │
- │ [04] MONITOR VIVO │ [09] PUERTOS Y RED │ [14] DESINSTALAR  │
- │ [05] FICHA CLIENTE │ [10] LIMPIAR CACHÉ │ [00] SALIR PANEL  │
- ╰═══════════════════┴═══════════════════┴═══════════════════╯
- ╭═══════════════════════════════════════════════════════════╮
- │ Script Version = v2.1.0 - Martin Scripts / Tin            │
- ╰═══════════════════════════════════════════════════════════╯
+ │ LIMITER  [ON]│ TUNNEL   [ON]│ FAIL2BAN [ON]│ CRON     [ON]│
+ ╰──────────────┴──────────────┴──────────────┴──────────────╯
+ ╭───────────────────┬───────────────────┬───────────────────╮
+ │ [01] USUARIOS SSH │ [06] BANNERS/TEXT │ [11] DOMINIO/DNS  │
+ │ [02] CREAR TRIAL  │ [07] RESTART TODO │ [12] TEST VELOCID │
+ │ [03] UDPGW 7300   │ [08] LIMITADOR    │ [13] ACTUALIZAR   │
+ │ [04] MONITOR VIVO │ [09] PUERTOS/RED  │ [14] DESINSTALAR  │
+ │ [05] FICHA CLIENT │ [10] LIMPIAR CACH │ [00] SALIR PANEL  │
+ ╰───────────────────┴───────────────────┴───────────────────╯
 
- Options [ 0 - 14 ] ❱❱❱ 
+  ❱❱❱ Seleccione una opción [0-14]: 
 ```
 
 ---
