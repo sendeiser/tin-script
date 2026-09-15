@@ -321,7 +321,7 @@ draw_dashboard() {
     local traffic_txt
     traffic_txt=$(get_traffic_stats)
 
-    local current_ver="2.2.1"
+    local current_ver="2.2.2"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -387,27 +387,159 @@ draw_dashboard() {
 }
 
 # ------------------------------------------------------------------------------
+# Selector Interactivo de Usuarios Túnel por Número
+# ------------------------------------------------------------------------------
+select_tunnel_user() {
+    local action_title="${1:-SELECCIONAR USUARIO}"
+    local pass_file="/etc/passwd"
+    local -a u_list=()
+
+    if [[ -r "$pass_file" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" || "$line" =~ ^# ]] && continue
+            local u="${line%%:*}"
+            [[ -z "$u" ]] && continue
+            local rest="${line#*:}"
+            rest="${rest#*:}"
+            local uid="${rest%%:*}"
+
+            local is_user=false
+            if [[ "$line" =~ LIM[:_=-]?([0-9]+) ]]; then
+                is_user=true
+            elif [[ "$uid" =~ ^[0-9]+$ && "$uid" -ge 1000 && "$uid" -lt 65534 ]]; then
+                if [[ "$u" != "nobody" && "$u" != "nogroup" && "$u" != "ubuntu" && "$u" != "debian" ]]; then
+                    is_user=true
+                fi
+            fi
+
+            if [[ "$is_user" == true ]]; then
+                u_list+=("$u")
+            fi
+        done < "$pass_file"
+    fi
+
+    if [[ ${#u_list[@]} -eq 0 ]]; then
+        echo -e "\n${C_YELLOW}[AVISO] No hay usuarios túnel registrados en el sistema.${C_RESET}"
+        local manual_u=""
+        read -r -p " ¿Desea ingresar el nombre manualmente? [s/N]: " manual_u || true
+        if [[ "${manual_u:-}" =~ ^[sS]$ ]]; then
+            local u_man=""
+            read -r -p " Nombre de usuario: " u_man || true
+            if [[ -n "${u_man:-}" ]] && id "$u_man" >/dev/null 2>&1; then
+                SELECTED_USER="$u_man"
+                return 0
+            else
+                echo -e "${C_RED}[ERROR] El usuario no existe en el sistema.${C_RESET}"
+                return 1
+            fi
+        fi
+        return 1
+    fi
+
+    echo -e "\n ${C_BORDER}╭───────────────────────────────────────────────────────────╮${C_RESET}"
+    printf " ${C_BORDER}│${C_RESET}  %b%b%-55s%b  ${C_BORDER}│${C_RESET}\n" "$C_TITLE" "$C_BOLD" "$action_title" "$C_RESET"
+    echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
+
+    local now_epoch
+    now_epoch=$(date +%s)
+    local i=1
+    for u in "${u_list[@]}"; do
+        local st="ACTIVO"
+        local inf="Sin expiración"
+
+        if passwd -S "$u" 2>/dev/null | grep -q " L "; then
+            st="BLOQUEADO"
+            inf="Suspendido"
+        elif command -v chage >/dev/null 2>&1; then
+            local exp_raw
+            exp_raw=$(chage -l "$u" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
+            if [[ -n "$exp_raw" && "$exp_raw" != "never" && "$exp_raw" != "nunca" ]]; then
+                local exp_epoch
+                exp_epoch=$(date -d "$exp_raw" +%s 2>/dev/null || true)
+                if [[ -n "$exp_epoch" ]]; then
+                    if [[ "$now_epoch" -gt "$exp_epoch" ]]; then
+                        st="EXPIRADO"
+                        inf="Expirado"
+                    else
+                        local diff_days=$(( (exp_epoch - now_epoch) / 86400 ))
+                        inf="${diff_days} días"
+                    fi
+                fi
+            fi
+        fi
+
+        local badge_col="$C_ON"
+        local badge_txt="[ACTIVO]   "
+        if [[ "$st" == "BLOQUEADO" ]]; then
+            badge_col="$C_RED"
+            badge_txt="[BLOQUEADO]"
+        elif [[ "$st" == "EXPIRADO" ]]; then
+            badge_col="$C_OFF"
+            badge_txt="[EXPIRADO] "
+        fi
+
+        printf " ${C_BORDER}│${C_RESET}  %b[%02d]%b %b%-18s%b %b%-11s%b %b%-20s%b ${C_BORDER}│${C_RESET}\n" \
+            "$C_NUM" "$i" "$C_RESET" \
+            "$C_TITLE" "${u:0:18}" "$C_RESET" \
+            "$badge_col" "$badge_txt" "$C_RESET" \
+            "$C_LABEL" "${inf:0:20}" "$C_RESET"
+        ((i++))
+    done
+
+    echo -e " ${C_BORDER}╰───────────────────────────────────────────────────────────╯${C_RESET}"
+    echo -e "  ${C_NUM}[M]${C_RESET} ${C_TITLE}Ingresar nombre manualmente${C_RESET}"
+    echo -e "  ${C_RED}[0]${C_RESET} ${C_TITLE}Cancelar operación${C_RESET}\n"
+
+    local sel=""
+    read -r -p "  ❱❱❱ Seleccione una opción [1-${#u_list[@]} / M / 0]: " sel || true
+    if [[ "$sel" == "0" || -z "$sel" ]]; then
+        echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
+        return 1
+    fi
+
+    if [[ "$sel" =~ ^[mM]$ ]]; then
+        local man_user=""
+        read -r -p " Ingrese el nombre de usuario: " man_user || true
+        if [[ -n "${man_user:-}" ]] && id "$man_user" >/dev/null 2>&1; then
+            SELECTED_USER="$man_user"
+            return 0
+        else
+            echo -e "${C_RED}[ERROR] El usuario '$man_user' no existe en el sistema.${C_RESET}"
+            return 1
+        fi
+    fi
+
+    if [[ "$sel" =~ ^[0-9]+$ ]] && (( sel >= 1 && sel <= ${#u_list[@]} )); then
+        SELECTED_USER="${u_list[$((sel - 1))]}"
+        return 0
+    else
+        echo -e "${C_RED}[ERROR] Selección inválida.${C_RESET}"
+        return 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # SUBMENÚ 1: GESTIÓN DE USUARIOS
 # ------------------------------------------------------------------------------
 menu_users() {
     while true; do
         clear
-        echo -e "${C_CYAN}╭═══════════════════════════════════════════════════════════╮${C_RESET}"
-        echo -e "${C_CYAN}│${C_RESET}               ${C_BOLD}${C_WHITE}★ GESTIÓN DE USUARIOS SSH ★${C_RESET}                ${C_CYAN}│${C_RESET}"
-        echo -e "${C_CYAN}╰═══════════════════════════════════════════════════════════╯${C_RESET}"
-        echo -e "  ${C_YELLOW}[1]${C_RESET} 📋 Ver lista y consumo de cuentas"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} ➕ Crear nuevo usuario túnel permanente"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} ⏱️  Crear cuenta trial rápida (Test)"
-        echo -e "  ${C_YELLOW}[4]${C_RESET} ✏️  Renovar / Modificar usuario"
-        echo -e "  ${C_YELLOW}[5]${C_RESET} 🔒 Bloquear / Desbloquear usuario"
-        echo -e "  ${C_YELLOW}[6]${C_RESET} ⚡ Expulsar sesiones activas"
-        echo -e "  ${C_YELLOW}[7]${C_RESET} ❌ Eliminar usuario del sistema"
-        echo -e "  ${C_YELLOW}[8]${C_RESET} 🔍 Ver detalles de una cuenta"
-        echo -e "  ${C_YELLOW}[9]${C_RESET} 📱 Ficha cliente (HTTP Custom)"
+        echo -e " ${C_BORDER}╭───────────────────────────────────────────────────────────╮${C_RESET}"
+        echo -e " ${C_BORDER}│${C_RESET}               ${C_BOLD}${C_WHITE}★ GESTIÓN DE USUARIOS SSH ★${C_RESET}                ${C_BORDER}│${C_RESET}"
+        echo -e " ${C_BORDER}╰───────────────────────────────────────────────────────────╯${C_RESET}"
+        echo -e "  ${C_NUM}[1]${C_RESET} 📋 Ver lista y consumo de cuentas"
+        echo -e "  ${C_NUM}[2]${C_RESET} ➕ Crear nuevo usuario túnel permanente"
+        echo -e "  ${C_NUM}[3]${C_RESET} ⏱️  Crear cuenta trial rápida (Test)"
+        echo -e "  ${C_NUM}[4]${C_RESET} ✏️  Renovar / Modificar usuario"
+        echo -e "  ${C_NUM}[5]${C_RESET} 🔒 Bloquear / Desbloquear usuario"
+        echo -e "  ${C_NUM}[6]${C_RESET} ⚡ Expulsar sesiones activas"
+        echo -e "  ${C_NUM}[7]${C_RESET} ❌ Eliminar usuario del sistema"
+        echo -e "  ${C_NUM}[8]${C_RESET} 🔍 Ver detalles de una cuenta"
+        echo -e "  ${C_NUM}[9]${C_RESET} 📱 Ficha cliente (HTTP Custom)"
         echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
-        echo -e "${C_GRAY}─────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e " ${C_BORDER}─────────────────────────────────────────────────────────────${C_RESET}"
         local opt_user=""
-        read -r -p " Seleccione una opción [0-9]: " opt_user || true
+        read -r -p "  ❱❱❱ Seleccione una opción [0-9]: " opt_user || true
 
         case "${opt_user:-}" in
             1)
@@ -434,14 +566,9 @@ menu_users() {
                 run_bin ssh-trial
                 ;;
             4)
-                echo -e "\n${C_BOLD}${C_CYAN}--- RENOVAR / MODIFICAR USUARIO ---${C_RESET}"
-                local u_name=""
-                read -r -p " Usuario a modificar: " u_name || true
-                if [[ -z "${u_name:-}" ]]; then
-                    echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-                elif ! id "$u_name" >/dev/null 2>&1; then
-                    echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
-                else
+                if select_tunnel_user "✏️  RENOVAR / MODIFICAR USUARIO"; then
+                    local u_name="$SELECTED_USER"
+                    echo -e "\n${C_LABEL}Modificando usuario:${C_RESET} ${C_TITLE}${u_name}${C_RESET}"
                     echo -e "Deje en blanco los campos que NO desee cambiar:"
                     local m_days="" m_limit="" m_pass=""
                     read -r -p " Días adicionales a renovar (ej: 30): " m_days || true
@@ -458,14 +585,9 @@ menu_users() {
                 press_enter
                 ;;
             5)
-                echo -e "\n${C_BOLD}${C_CYAN}--- BLOQUEAR / DESBLOQUEAR USUARIO ---${C_RESET}"
-                local u_name=""
-                read -r -p " Usuario: " u_name || true
-                if [[ -z "${u_name:-}" ]]; then
-                    echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-                elif ! id "$u_name" >/dev/null 2>&1; then
-                    echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
-                else
+                if select_tunnel_user "🔒 BLOQUEAR / DESBLOQUEAR USUARIO"; then
+                    local u_name="$SELECTED_USER"
+                    echo -e ""
                     run_bin ssh-userlock "$u_name" status
                     echo -e "Acción: [1] Bloquear  [2] Desbloquear  [0] Cancelar"
                     local lock_opt=""
@@ -479,21 +601,17 @@ menu_users() {
                 press_enter
                 ;;
             6)
-                echo -e "\n${C_BOLD}${C_CYAN}--- EXPULSAR SESIONES ACTIVAS ---${C_RESET}"
-                local u_name=""
-                read -r -p " Usuario a desconectar: " u_name || true
-                if [[ -n "${u_name:-}" ]]; then
+                if select_tunnel_user "⚡ EXPULSAR SESIONES ACTIVAS"; then
+                    local u_name="$SELECTED_USER"
                     run_bin ssh-killuser "$u_name" || true
                 fi
                 press_enter
                 ;;
             7)
-                echo -e "\n${C_BOLD}${C_RED}--- ELIMINAR USUARIO DEL SISTEMA ---${C_RESET}"
-                local u_name=""
-                read -r -p " Nombre de usuario a eliminar: " u_name || true
-                if [[ -n "${u_name:-}" ]]; then
+                if select_tunnel_user "❌ ELIMINAR USUARIO DEL SISTEMA"; then
+                    local u_name="$SELECTED_USER"
                     local confirm=""
-                    read -r -p " ¿Está seguro de eliminar '$u_name'? [s/N]: " confirm || true
+                    read -r -p " ¿Está seguro de eliminar a '$u_name'? [s/N]: " confirm || true
                     if [[ "${confirm:-}" =~ ^[sS]$ ]]; then
                         run_bin ssh-userdel "$u_name" || true
                     else
@@ -503,32 +621,21 @@ menu_users() {
                 press_enter
                 ;;
             8)
-                echo -e "\n${C_BOLD}${C_CYAN}--- DETALLES DE CUENTA ---${C_RESET}"
-                local u_name=""
-                read -r -p " Usuario a consultar: " u_name || true
-                if [[ -n "${u_name:-}" ]]; then
-                    if id "$u_name" >/dev/null 2>&1; then
-                        echo -e "${C_GRAY}─────────────────────────────────────────────────────────────${C_RESET}"
-                        id "$u_name"
-                        chage -l "$u_name" 2>/dev/null || true
-                        run_bin ssh-userlock "$u_name" status
-                        echo -e "${C_GRAY}─────────────────────────────────────────────────────────────${C_RESET}"
-                    else
-                        echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
-                    fi
+                if select_tunnel_user "🔍 DETALLES DE CUENTA"; then
+                    local u_name="$SELECTED_USER"
+                    echo -e " ${C_BORDER}─────────────────────────────────────────────────────────────${C_RESET}"
+                    id "$u_name"
+                    chage -l "$u_name" 2>/dev/null || true
+                    run_bin ssh-userlock "$u_name" status
+                    echo -e " ${C_BORDER}─────────────────────────────────────────────────────────────${C_RESET}"
                 fi
                 press_enter
                 ;;
             9)
-                echo -e "\n${C_BOLD}${C_CYAN}--- GENERAR FICHA HTTP CUSTOM ---${C_RESET}"
-                local u_name="" u_pass=""
-                read -r -p " Usuario: " u_name || true
-                if [[ -z "${u_name:-}" ]]; then
-                    echo -e "${C_YELLOW}Operación cancelada.${C_RESET}"
-                elif ! id "$u_name" >/dev/null 2>&1; then
-                    echo -e "${C_RED}[ERROR] El usuario '$u_name' no existe.${C_RESET}"
-                else
-                    read -r -p " Contraseña (opcional): " u_pass || true
+                if select_tunnel_user "📱 GENERAR FICHA HTTP CUSTOM"; then
+                    local u_name="$SELECTED_USER"
+                    local u_pass=""
+                    read -r -p " Contraseña (opcional para mostrar en ficha): " u_pass || true
                     clear
                     run_bin ssh-httpcustom "$u_name" "${u_pass:-********}" || true
                 fi
