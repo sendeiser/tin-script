@@ -19,10 +19,10 @@ if [[ -t 1 ]]; then
     C_BORDER="\033[0;36m"     # Slate Cyan sutil para bordes limpios
     C_TITLE="\033[1;37m"      # Blanco puro destacado
     C_BRAND="\033[1;36m"      # Cyan eléctrico para la marca
-    C_LABEL="\033[0;90m"      # Gris neutro suave para etiquetas
-    C_VAL="\033[0;37m"        # Blanco suave legible para valores
+    C_LABEL="\033[1;36m"      # Cyan eléctrico de alta visibilidad en pantallas móviles
+    C_VAL="\033[1;37m"        # Blanco puro brillante para valores
     C_NUM="\033[1;33m"        # Ámbar cálido suave para números de opción [01]
-    C_TEXT="\033[0;37m"       # Blanco suave para texto de opciones
+    C_TEXT="\033[1;37m"       # Blanco puro brillante para texto de opciones
     C_ON="\033[1;32m"         # Verde esmeralda minimalista [ON]
     C_OFF="\033[0;31m"        # Rojo apagado [OFF]
 
@@ -34,7 +34,7 @@ if [[ -t 1 ]]; then
     C_CYAN="\033[1;36m"
     C_MAGENTA="\033[1;35m"
     C_WHITE="\033[1;37m"
-    C_GRAY="\033[0;90m"
+    C_GRAY="\033[0;36m"       # Slate cyan sutil para líneas divisorias en lugar de gris apagado
     BG_BLUE=""
     BG_PINK=""
 else
@@ -321,7 +321,7 @@ draw_dashboard() {
     local traffic_txt
     traffic_txt=$(get_traffic_stats)
 
-    local current_ver="2.2.0"
+    local current_ver="2.2.1"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
