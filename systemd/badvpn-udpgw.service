@@ -1,0 +1,21 @@
+[Unit]
+Description=BadVPN UDP Gateway on Port 7300 for SSH & HTTP Custom
+Documentation=https://github.com/sendeiser/tin-script
+After=syslog.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500
+Restart=always
+RestartSec=3
+RestartPreventExitStatus=23
+LimitNPROC=10000
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=badvpn-udpgw
+
+[Install]
+WantedBy=multi-user.target

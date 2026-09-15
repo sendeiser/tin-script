@@ -104,10 +104,17 @@ if [[ "${1:-}" == "--uninstall" ]]; then
         systemctl disable ssh-wsproxy 2>/dev/null || true
     fi
     
-    rm -f /etc/systemd/system/ssh-limiter.service /etc/systemd/system/ssh-wsproxy.service
+    if systemctl is-active --quiet badvpn-udpgw 2>/dev/null; then
+        systemctl stop badvpn-udpgw 2>/dev/null || true
+    fi
+    if systemctl is-enabled --quiet badvpn-udpgw 2>/dev/null; then
+        systemctl disable badvpn-udpgw 2>/dev/null || true
+    fi
+    
+    rm -f /etc/systemd/system/ssh-limiter.service /etc/systemd/system/ssh-wsproxy.service /etc/systemd/system/badvpn-udpgw.service
     systemctl daemon-reload 2>/dev/null || true
     
-    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner banner ssh-httpcustom httpcustom custom ssh-domain domain dominio ssh-wsproxy wsproxy update menu tin vps; do
+    for b in ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner banner ssh-httpcustom httpcustom custom ssh-domain domain dominio ssh-wsproxy wsproxy ssh-trial trial ssh-udpgw udpgw badudp update menu tin vps; do
         rm -f "/usr/local/bin/$b" "/usr/bin/$b"
     done
     rm -rf /etc/vps-ssh-limiter
@@ -260,7 +267,7 @@ log_success "Shells restringidas y persistentes configuradas para autenticación
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy ssh-tunnel-shell menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy ssh-tunnel-shell ssh-trial ssh-udpgw menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -292,14 +299,17 @@ ln -sf /usr/local/bin/ssh-domain /usr/local/bin/dominio
 ln -sf /usr/local/bin/ssh-wsproxy /usr/local/bin/wsproxy
 ln -sf /usr/local/bin/ssh-tunnel-shell /usr/local/bin/tunnel-shell
 ln -sf /usr/local/bin/ssh-tunnel-shell /bin/ssh-tunnel-shell
+ln -sf /usr/local/bin/ssh-trial /usr/local/bin/trial
+ln -sf /usr/local/bin/ssh-udpgw /usr/local/bin/udpgw
+ln -sf /usr/local/bin/ssh-udpgw /usr/local/bin/badudp
 
-for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy tunnel-shell; do
+for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy tunnel-shell trial udpgw badudp; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "2.0.4" > /etc/vps-ssh-limiter/version
+echo "2.1.0" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]] || grep -q "TARGET_PORT=143" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'
@@ -314,7 +324,7 @@ if [[ -x /usr/local/bin/ssh-banner ]]; then
     /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
 fi
 
-log_success "Binarios y atajos ('menu', 'update', 'banner', 'domain', 'httpcustom', 'wsproxy', 'tin', 'vps') vinculados."
+log_success "Binarios y atajos ('menu', 'update', 'banner', 'domain', 'httpcustom', 'wsproxy', 'trial', 'udpgw', 'tin', 'vps') vinculados."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación de Demonios Systemd (ssh-limiter & ssh-wsproxy)
@@ -383,6 +393,41 @@ EOF
     chmod 644 "$WS_SERVICE_DST"
 fi
 
+UDPGW_SERVICE_DST="/etc/systemd/system/badvpn-udpgw.service"
+if [[ -f "$SCRIPT_DIR/systemd/badvpn-udpgw.service" ]]; then
+    install -m 644 "$SCRIPT_DIR/systemd/badvpn-udpgw.service" "$UDPGW_SERVICE_DST"
+else
+    cat > "$UDPGW_SERVICE_DST" <<'EOF'
+[Unit]
+Description=BadVPN UDP Gateway on Port 7300 for SSH & HTTP Custom
+Documentation=https://github.com/sendeiser/tin-script
+After=syslog.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500
+Restart=always
+RestartSec=3
+RestartPreventExitStatus=23
+LimitNPROC=10000
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=badvpn-udpgw
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 644 "$UDPGW_SERVICE_DST"
+fi
+
+# Instalar binario badvpn-udpgw si no existe aún
+if [[ -x /usr/local/bin/ssh-udpgw ]]; then
+    /usr/local/bin/ssh-udpgw --install >/dev/null 2>&1 || true
+fi
+
 # Aplicar banners del sistema y OpenSSH
 if [[ -x /usr/local/bin/ssh-banner ]]; then
     /usr/local/bin/ssh-banner --apply 2>/dev/null || true
@@ -396,6 +441,9 @@ systemctl restart ssh-limiter.service 2>/dev/null || true
 systemctl enable ssh-wsproxy.service --now 2>/dev/null || true
 systemctl restart ssh-wsproxy.service 2>/dev/null || true
 
+systemctl enable badvpn-udpgw.service --now 2>/dev/null || true
+systemctl restart badvpn-udpgw.service 2>/dev/null || true
+
 if systemctl is-active --quiet ssh-limiter; then
     log_success "Servicio ssh-limiter activo y supervisado por systemd."
 else
@@ -406,6 +454,12 @@ if systemctl is-active --quiet ssh-wsproxy; then
     log_success "Servicio ssh-wsproxy activo en el puerto 80 (systemd)."
 else
     log_warn "El servicio ssh-wsproxy requiere revisión (systemctl status ssh-wsproxy)."
+fi
+
+if systemctl is-active --quiet badvpn-udpgw; then
+    log_success "Servicio badvpn-udpgw activo en el puerto 7300 (systemd)."
+else
+    log_warn "El servicio badvpn-udpgw requiere revisión (systemctl status badvpn-udpgw)."
 fi
 
 # ------------------------------------------------------------------------------
@@ -423,6 +477,8 @@ echo -e "${C_GRAY}────────────────────�
 echo -e "${C_BOLD}Comandos CLI directos:${C_RESET}"
 echo -e "  ● ${C_CYAN}menu${C_RESET}         : Panel principal"
 echo -e "  ● ${C_CYAN}ssh-online${C_RESET}   : Monitor de datos y cuentas"
+echo -e "  ● ${C_CYAN}ssh-trial${C_RESET}    : Generador de cuentas demo/trial"
+echo -e "  ● ${C_CYAN}ssh-udpgw${C_RESET}    : BadVPN UDP Gateway (7300)"
 echo -e "  ● ${C_CYAN}ssh-useradd${C_RESET}  : Crear cuenta túnel"
 echo -e "  ● ${C_CYAN}ssh-usermod${C_RESET}  : Modificar cuenta o días"
 echo -e "  ● ${C_CYAN}ssh-userlock${C_RESET} : Bloquear o desbloquear"

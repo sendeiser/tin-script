@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-trial
+# Generador de Cuentas Temporales (Trial) para Pruebas de Clientes.
+# Auto-expiración garantizada mediante temporizador transitorio de systemd y at.
+# ==============================================================================
+set -euo pipefail
+
+# Configuración de Colores ANSI
+if [[ -t 1 ]]; then
+    C_RESET="\033[0m"
+    C_RED="\033[1;31m"
+    C_GREEN="\033[1;32m"
+    C_YELLOW="\033[1;33m"
+    C_BLUE="\033[1;34m"
+    C_MAGENTA="\033[1;35m"
+    C_CYAN="\033[1;36m"
+    C_WHITE="\033[1;37m"
+    C_BOLD="\033[1m"
+    C_GRAY="\033[0;90m"
+else
+    C_RESET=""
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_BLUE=""
+    C_MAGENTA=""
+    C_CYAN=""
+    C_WHITE=""
+    C_BOLD=""
+    C_GRAY=""
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Este script debe ejecutarse con privilegios de root (sudo ssh-trial)." >&2
+    exit 1
+fi
+
+# Parámetros por defecto
+DEFAULT_PASS="1"
+DEFAULT_LIMIT="1"
+DEFAULT_MINUTES="60"
+
+# Obtención de IP pública del servidor
+get_server_ip() {
+    curl -s4 -m 2 https://api.ipify.org 2>/dev/null || \
+    curl -s4 -m 2 https://icanhazip.com 2>/dev/null || \
+    ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n1 || \
+    hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1"
+}
+
+# Obtención del dominio configurado
+get_server_domain() {
+    if [[ -f /etc/vps-ssh-limiter/domain && -s /etc/vps-ssh-limiter/domain ]]; then
+        tr -d '[:space:]' < /etc/vps-ssh-limiter/domain
+    else
+        get_server_ip
+    fi
+}
+
+# Generación de nombre de usuario aleatorio: trial + 4 caracteres
+generate_trial_name() {
+    local rand_suffix
+    rand_suffix=$(tr -dc '0-9' < /dev/urandom | head -c 4 2>/dev/null || echo "$(( RANDOM % 9000 + 1000 ))")
+    echo "trial${rand_suffix}"
+}
+
+clear
+echo -e "${C_CYAN}╭════════════════════════════════════════════════════════════╮${C_RESET}"
+echo -e "${C_CYAN}│${C_RESET}       ${C_BOLD}${C_WHITE}★ GENERADOR DE CUENTAS TRIAL (TEST / DEMO) ★${C_RESET}        ${C_CYAN}│${C_RESET}"
+echo -e "${C_CYAN}╰════════════════════════════════════════════════════════════╯${C_RESET}"
+echo -e " ${C_GRAY}Genera accesos temporales para clientes con auto-borrado.${C_RESET}\n"
+
+# 1. Nombre de Usuario
+SUGGESTED_USER=$(generate_trial_name)
+while id "$SUGGESTED_USER" >/dev/null 2>&1; do
+    SUGGESTED_USER=$(generate_trial_name)
+done
+
+read -r -p " Nombre de Usuario [$SUGGESTED_USER]: " INPUT_USER || true
+USERNAME="${INPUT_USER:-$SUGGESTED_USER}"
+
+# Sanitización de usuario
+if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+    echo -e "${C_RED}[ERROR]${C_RESET} Nombre de usuario inválido. Use solo caracteres alfanuméricos." >&2
+    exit 1
+fi
+
+if id "$USERNAME" >/dev/null 2>&1; then
+    echo -e "${C_RED}[ERROR]${C_RESET} El usuario '$USERNAME' ya existe en el sistema." >&2
+    exit 1
+fi
+
+# 2. Contraseña
+read -r -p " Contraseña de acceso [$DEFAULT_PASS]: " INPUT_PASS || true
+PASSWORD="${INPUT_PASS:-$DEFAULT_PASS}"
+
+# 3. Límite de conexiones simultáneas
+read -r -p " Límite de conexiones [$DEFAULT_LIMIT]: " INPUT_LIMIT || true
+LIMIT="${INPUT_LIMIT:-$DEFAULT_LIMIT}"
+if [[ ! "$LIMIT" =~ ^[0-9]+$ || "$LIMIT" -le 0 ]]; then
+    LIMIT=1
+fi
+
+# 4. Duración de la cuenta en minutos
+echo -e "\n ${C_BOLD}Seleccione la duración del periodo de prueba:${C_RESET}"
+echo -e "  ${C_YELLOW}[1]${C_RESET} 30 Minutos"
+echo -e "  ${C_YELLOW}[2]${C_RESET} 60 Minutos (1 Hora - Recomendado)"
+echo -e "  ${C_YELLOW}[3]${C_RESET} 120 Minutos (2 Horas)"
+echo -e "  ${C_YELLOW}[4]${C_RESET} 24 Horas (1 Día)"
+echo -e "  ${C_YELLOW}[5]${C_RESET} Duración personalizada (en minutos)"
+read -r -p " Opción [1-5, por defecto 2]: " TIME_OPT || true
+
+case "${TIME_OPT:-2}" in
+    1) DURATION_MIN=30 ;;
+    2) DURATION_MIN=60 ;;
+    3) DURATION_MIN=120 ;;
+    4) DURATION_MIN=1440 ;;
+    5)
+        read -r -p " Ingrese los minutos de duración: " CUST_MIN || true
+        if [[ "$CUST_MIN" =~ ^[0-9]+$ && "$CUST_MIN" -gt 0 ]]; then
+            DURATION_MIN="$CUST_MIN"
+        else
+            DURATION_MIN=60
+        fi
+        ;;
+    *) DURATION_MIN=60 ;;
+esac
+
+DURATION_SEC=$(( DURATION_MIN * 60 ))
+NOW_EPOCH=$(date +%s)
+EXPIRE_EPOCH=$(( NOW_EPOCH + DURATION_SEC ))
+EXPIRE_STR=$(date -d "@${EXPIRE_EPOCH}" +"%H:%M:%S (%d/%m/%Y)" 2>/dev/null || date +"%T")
+
+# 5. Selección de Shell
+RESTRICTED_SHELL="/usr/local/bin/ssh-tunnel-shell"
+if [[ ! -x "$RESTRICTED_SHELL" ]]; then
+    RESTRICTED_SHELL="/bin/false"
+fi
+
+# 6. Creación del usuario en Linux
+useradd -m -s "$RESTRICTED_SHELL" -c "LIM:${LIMIT} | TRIAL:${DURATION_MIN}m" "$USERNAME" 2>/dev/null || \
+useradd -s "$RESTRICTED_SHELL" -c "LIM:${LIMIT} | TRIAL:${DURATION_MIN}m" "$USERNAME"
+
+echo "${USERNAME}:${PASSWORD}" | chpasswd
+
+# 7. Programar borrado automático
+# A. Mediante temporizador de systemd-run (nativo, 100% confiable)
+if command -v systemd-run >/dev/null 2>&1; then
+    systemd-run --unit="trial-${USERNAME}" --on-active="${DURATION_SEC}s" /bin/bash -c "
+        /usr/local/bin/ssh-killuser '$USERNAME' 2>/dev/null || true
+        userdel -f -r '$USERNAME' 2>/dev/null || userdel -f '$USERNAME' 2>/dev/null || true
+    " >/dev/null 2>&1 || true
+fi
+
+# B. Mediante demonio 'at' si está presente
+if command -v at >/dev/null 2>&1; then
+    echo "/usr/local/bin/ssh-killuser '$USERNAME' 2>/dev/null; userdel -f -r '$USERNAME' 2>/dev/null" | at now + "${DURATION_MIN}" minutes >/dev/null 2>&1 || true
+fi
+
+# C. Registro en base de datos local de trials
+mkdir -p /etc/vps-ssh-limiter/trials
+echo "${USERNAME}:${EXPIRE_EPOCH}:${DURATION_MIN}" >> /etc/vps-ssh-limiter/trials.db 2>/dev/null || true
+
+# 8. Obtener datos de red y puertos
+SERVER_IP=$(get_server_ip)
+SERVER_DOMAIN=$(get_server_domain)
+
+clear
+echo -e "${C_CYAN}╭════════════════════════════════════════════════════════════╮${C_RESET}"
+echo -e "${C_CYAN}│${C_RESET}            ${C_BOLD}${C_GREEN}✔ CUENTA TRIAL CREADA EXITOSAMENTE ★${C_RESET}            ${C_CYAN}│${C_RESET}"
+echo -e "${C_CYAN}╰════════════════════════════════════════════════════════════╯${C_RESET}"
+echo -e " ${C_BOLD}Usuario        :${C_RESET} ${C_YELLOW}${USERNAME}${C_RESET}"
+echo -e " ${C_BOLD}Contraseña     :${C_RESET} ${C_YELLOW}${PASSWORD}${C_RESET}"
+echo -e " ${C_BOLD}Límite Disp.   :${C_RESET} ${LIMIT} Conexión(es)"
+echo -e " ${C_BOLD}Tiempo Activo  :${C_RESET} ${C_GREEN}${DURATION_MIN} Minutos${C_RESET}"
+echo -e " ${C_BOLD}Expira a las   :${C_RESET} ${C_RED}${EXPIRE_STR}${C_RESET}"
+echo -e "${C_GRAY}──────────────────────────────────────────────────────────────${C_RESET}"
+echo -e " ${C_BOLD}Host / Dominio :${C_RESET} ${C_CYAN}${SERVER_DOMAIN}${C_RESET}"
+echo -e " ${C_BOLD}Dirección IP   :${C_RESET} ${SERVER_IP}"
+echo -e " ${C_BOLD}Puerto OpenSSH :${C_RESET} 22, 143"
+echo -e " ${C_BOLD}Puerto Dropbear:${C_RESET} 90, 109"
+echo -e " ${C_BOLD}WebSocket WS   :${C_RESET} 80, 8080"
+echo -e " ${C_BOLD}BadVPN UDPGW   :${C_RESET} ${C_GREEN}7300${C_RESET} (Juegos / VoIP)"
+echo -e "${C_GRAY}──────────────────────────────────────────────────────────────${C_RESET}"
+echo -e " ${C_BOLD}${C_WHITE}★ FICHA PARA HTTP CUSTOM (Copiar y Pegar):${C_RESET}"
+echo -e " ${C_GREEN}${SERVER_DOMAIN}:80@${USERNAME}:${PASSWORD}${C_RESET}"
+echo -e ""
+echo -e " ${C_BOLD}${C_WHITE}★ PAYLOAD RECOMENDADO (Websocket CDN/Directo):${C_RESET}"
+echo -e " ${C_CYAN}GET / HTTP/1.1[crlf]Host: ${SERVER_DOMAIN}[crlf]Upgrade: websocket[crlf][crlf]${C_RESET}"
+echo -e "${C_CYAN}╰════════════════════════════════════════════════════════════╯${C_RESET}"
+
+# Guardar copia de ticket para consulta
+TICKET_FILE="/etc/vps-ssh-limiter/trials/ticket-${USERNAME}.txt"
+cat > "$TICKET_FILE" 2>/dev/null <<EOF || true
+==============================================
+CUENTA TRIAL TEMPORAL (HTTP CUSTOM / SSH)
+==============================================
+Usuario        : ${USERNAME}
+Contraseña     : ${PASSWORD}
+Límite Disp.   : ${LIMIT}
+Tiempo Activo  : ${DURATION_MIN} Minutos
+Expira a las   : ${EXPIRE_STR}
+Host / Dominio : ${SERVER_DOMAIN}
+IP Servidor    : ${SERVER_IP}
+Puertos SSH    : 22, 143
+Puertos Drop   : 90, 109
+Puertos WS     : 80, 8080
+BadVPN UDPGW   : 7300
+
+Ficha de Conexión HTTP Custom:
+${SERVER_DOMAIN}:80@${USERNAME}:${PASSWORD}
+
+Payload WebSocket:
+GET / HTTP/1.1[crlf]Host: ${SERVER_DOMAIN}[crlf]Upgrade: websocket[crlf][crlf]
+==============================================
+EOF
+
+echo ""
+read -r -p " Presione [Enter] para continuar..." _ || true
+exit 0

@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# vps-ssh-limiter: bin/ssh-udpgw
+# Gestor del servicio BadVPN UDP Gateway en puerto 7300 para HTTP Custom / Juegos.
+# ==============================================================================
+set -euo pipefail
+
+# Configuración de Colores ANSI
+if [[ -t 1 ]]; then
+    C_RESET="\033[0m"
+    C_RED="\033[1;31m"
+    C_GREEN="\033[1;32m"
+    C_YELLOW="\033[1;33m"
+    C_BLUE="\033[1;34m"
+    C_MAGENTA="\033[1;35m"
+    C_CYAN="\033[1;36m"
+    C_WHITE="\033[1;37m"
+    C_BOLD="\033[1m"
+    C_GRAY="\033[0;90m"
+else
+    C_RESET=""
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_BLUE=""
+    C_MAGENTA=""
+    C_CYAN=""
+    C_WHITE=""
+    C_BOLD=""
+    C_GRAY=""
+fi
+
+SERVICE_NAME="badvpn-udpgw"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+BIN_PATH="/usr/local/bin/badvpn-udpgw"
+DEFAULT_PORT="7300"
+
+log_info() { echo -e "${C_CYAN}[INFO]${C_RESET} $*"; }
+log_success() { echo -e "${C_GREEN}[OK]${C_RESET} $*"; }
+log_warn() { echo -e "${C_YELLOW}[AVISO]${C_RESET} $*"; }
+log_error() { echo -e "${C_RED}[ERROR]${C_RESET} $*" >&2; }
+
+press_enter() {
+    echo ""
+    read -r -p " Presione [Enter] para continuar..." _ || true
+}
+
+is_service_active() {
+    systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null
+}
+
+is_service_enabled() {
+    systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null
+}
+
+install_badvpn() {
+    log_info "Instalando BadVPN UDP Gateway..."
+    
+    # 1. Comprobar si ya existe un binario funcional en el sistema
+    if [[ -x "$BIN_PATH" ]]; then
+        log_success "Binario badvpn-udpgw ya disponible en $BIN_PATH."
+    elif [[ -x "/usr/bin/badvpn-udpgw" ]]; then
+        ln -sf "/usr/bin/badvpn-udpgw" "$BIN_PATH"
+        log_success "Enlace simbólico creado hacia $BIN_PATH."
+    else
+        # 2. Intentar paquete oficial por APT si existe
+        log_info "Verificando repositorio APT..."
+        if apt-get install -y -qq badvpn 2>/dev/null; then
+            if [[ -x "/usr/bin/badvpn-udpgw" ]]; then
+                ln -sf "/usr/bin/badvpn-udpgw" "$BIN_PATH"
+            fi
+        fi
+
+        # 3. Si aún no está disponible, descargar binario optimizado para x86_64
+        if [[ ! -x "$BIN_PATH" ]]; then
+            log_info "Descargando binario compilado de badvpn-udpgw..."
+            local arch
+            arch=$(uname -m)
+            local downloaded=false
+
+            if [[ "$arch" == "x86_64" ]]; then
+                # Intentar descarga desde mirrors seguros conocidos
+                local mirrors=(
+                    "https://raw.githubusercontent.com/sendeiser/tin-script/main/bin/badvpn-udpgw"
+                    "https://raw.githubusercontent.com/fahrialimudin/autoscript-vip/main/media/udp-mini"
+                    "https://github.com/ambrop72/badvpn/raw/master/build/udpgw/badvpn-udpgw"
+                )
+                for url in "${mirrors[@]}"; do
+                    if curl -fsSL -m 15 "$url" -o "$BIN_PATH" 2>/dev/null; then
+                        chmod 755 "$BIN_PATH"
+                        if "$BIN_PATH" --version >/dev/null 2>&1 || strings "$BIN_PATH" | grep -qi "badvpn" 2>/dev/null; then
+                            downloaded=true
+                            log_success "Binario descargado correctamente desde mirror."
+                            break
+                        fi
+                    fi
+                done
+            fi
+
+            # 4. Compilación fallback si no se pudo descargar
+            if [[ "$downloaded" == false && ! -x "$BIN_PATH" ]]; then
+                log_info "Compilando badvpn-udpgw desde código fuente (puede tomar 1-2 minutos)..."
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update -qq -y
+                apt-get install -y -qq cmake build-essential git libssl-dev || true
+                
+                local tmp_dir
+                tmp_dir=$(mktemp -d /tmp/badvpn_build.XXXXXX)
+                if git clone --depth 1 https://github.com/ambrop72/badvpn.git "$tmp_dir/badvpn" 2>/dev/null; then
+                    mkdir -p "$tmp_dir/badvpn/build"
+                    (
+                        cd "$tmp_dir/badvpn/build"
+                        cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null 2>&1
+                        make -j"$(nproc)" >/dev/null 2>&1
+                        install -m 755 udpgw/badvpn-udpgw "$BIN_PATH"
+                    )
+                    rm -rf "$tmp_dir"
+                fi
+            fi
+        fi
+    fi
+
+    if [[ ! -x "$BIN_PATH" ]]; then
+        log_error "No se pudo instalar el ejecutable badvpn-udpgw. Verifique conexión a Internet y dependencias."
+        return 1
+    fi
+
+    # Instalar unidad systemd si no existe
+    if [[ ! -f "$SERVICE_FILE" ]]; then
+        log_info "Creando servicio systemd $SERVICE_FILE..."
+        cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=BadVPN UDP Gateway on Port ${DEFAULT_PORT} for SSH & HTTP Custom
+Documentation=https://github.com/sendeiser/tin-script
+After=syslog.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=${BIN_PATH} --listen-addr 127.0.0.1:${DEFAULT_PORT} --max-clients 500
+Restart=always
+RestartSec=3
+RestartPreventExitStatus=23
+LimitNPROC=10000
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=badvpn-udpgw
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        chmod 644 "$SERVICE_FILE"
+    fi
+
+    systemctl daemon-reload
+    systemctl enable "${SERVICE_NAME}" --now >/dev/null 2>&1 || true
+    systemctl restart "${SERVICE_NAME}" >/dev/null 2>&1 || true
+    log_success "BadVPN UDP Gateway instalado y activado en el puerto ${DEFAULT_PORT}."
+    return 0
+}
+
+start_service() {
+    if [[ ! -x "$BIN_PATH" || ! -f "$SERVICE_FILE" ]]; then
+        install_badvpn || return 1
+    fi
+    log_info "Iniciando servicio ${SERVICE_NAME}..."
+    systemctl restart "${SERVICE_NAME}"
+    if is_service_active; then
+        log_success "UDP Gateway 7300 activo y en ejecución."
+    else
+        log_error "No se pudo iniciar el servicio ${SERVICE_NAME}."
+    fi
+}
+
+stop_service() {
+    log_info "Deteniendo servicio ${SERVICE_NAME}..."
+    systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+    log_success "UDP Gateway 7300 detenido."
+}
+
+restart_service() {
+    log_info "Reiniciando servicio ${SERVICE_NAME}..."
+    systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+    if is_service_active; then
+        log_success "UDP Gateway 7300 reiniciado correctamente."
+    else
+        log_error "El servicio no arrancó tras reiniciar."
+    fi
+}
+
+toggle_enable() {
+    if is_service_enabled; then
+        systemctl disable "${SERVICE_NAME}"
+        log_warn "Autoarranque deshabilitado para ${SERVICE_NAME}."
+    else
+        systemctl enable "${SERVICE_NAME}"
+        log_success "Autoarranque habilitado para ${SERVICE_NAME}."
+    fi
+}
+
+show_status() {
+    clear
+    echo -e "${C_CYAN}╭════════════════════════════════════════════════════════════╮${C_RESET}"
+    echo -e "${C_CYAN}│${C_RESET}        ${C_BOLD}${C_WHITE}★ ESTADO DE BADVPN UDP GATEWAY (PUERTO 7300) ★${C_RESET}       ${C_CYAN}│${C_RESET}"
+    echo -e "${C_CYAN}╰════════════════════════════════════════════════════════════╯${C_RESET}"
+
+    local status_badge="${C_RED}[INACTIVO / OFF]${C_RESET}"
+    if is_service_active; then
+        status_badge="${C_GREEN}[ACTIVO / ON]${C_RESET}"
+    fi
+
+    local enabled_badge="${C_RED}[DESHABILITADO]${C_RESET}"
+    if is_service_enabled; then
+        enabled_badge="${C_GREEN}[HABILITADO AL INICIO]${C_RESET}"
+    fi
+
+    echo -e " ${C_BOLD}Servicio Systemd:${C_RESET} ${SERVICE_NAME}"
+    echo -e " ${C_BOLD}Estado Actual   :${C_RESET} ${status_badge}"
+    echo -e " ${C_BOLD}Autoarranque    :${C_RESET} ${enabled_badge}"
+    echo -e " ${C_BOLD}Puerto Escucha  :${C_RESET} ${C_YELLOW}127.0.0.1:${DEFAULT_PORT}${C_RESET} (TCP/UDP Forwarding)"
+    echo -e " ${C_BOLD}Ruta Binario    :${C_RESET} ${BIN_PATH}"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e " ${C_BOLD}¿Para qué sirve?${C_RESET}"
+    echo -e " Permite reenviar paquetes UDP en apps como HTTP Custom."
+    echo -e " Esencial para llamadas de WhatsApp, juegos online (Free Fire,"
+    echo -e " PUBG, COD Mobile) y protocolos UDP encapsulados en el túnel."
+    echo -e "${C_CYAN}╰════════════════════════════════════════════════════════════╯${C_RESET}"
+}
+
+# Procesar argumentos si existen
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        --status|-s)
+            if is_service_active; then
+                echo "active"
+            else
+                echo "inactive"
+            fi
+            exit 0
+            ;;
+        --badge)
+            if is_service_active; then
+                echo -e "${C_GREEN}ON${C_RESET}"
+            else
+                echo -e "${C_RED}OFF${C_RESET}"
+            fi
+            exit 0
+            ;;
+        --start)
+            start_service
+            exit 0
+            ;;
+        --stop)
+            stop_service
+            exit 0
+            ;;
+        --restart|-r)
+            restart_service
+            exit 0
+            ;;
+        --install|-i)
+            install_badvpn
+            exit 0
+            ;;
+        --enable)
+            systemctl enable "${SERVICE_NAME}"
+            exit 0
+            ;;
+        --disable)
+            systemctl disable "${SERVICE_NAME}"
+            exit 0
+            ;;
+        -h|--help)
+            cat <<EOF
+Uso: ssh-udpgw [OPCIONES]
+
+Opciones:
+    --status, -s     Muestra estado simple (active/inactive).
+    --badge          Muestra insignia coloreada (ON/OFF).
+    --start          Inicia el servicio BadVPN UDPGW 7300.
+    --stop           Detiene el servicio.
+    --restart, -r    Reinicia el servicio.
+    --install, -i    Instala el binario y servicio systemd.
+    --enable         Habilita arranque automático al encender el servidor.
+    --disable        Deshabilita arranque automático.
+    -h, --help       Muestra esta ayuda.
+EOF
+            exit 0
+            ;;
+        *)
+            log_error "Opción desconocida: $1"
+            exit 1
+            ;;
+    esac
+fi
+
+# Menú Interactivo si no se proporcionan argumentos
+while true; do
+    show_status
+    echo -e "\n ${C_BOLD}Acciones disponibles:${C_RESET}"
+    echo -e "  ${C_YELLOW}[1]${C_RESET} ▶ Iniciar / Reiniciar UDP Gateway (7300)"
+    echo -e "  ${C_YELLOW}[2]${C_RESET} ⏹ Detener UDP Gateway"
+    echo -e "  ${C_YELLOW}[3]${C_RESET} 🔄 Conmutar Autoarranque (Habilitar / Deshabilitar)"
+    echo -e "  ${C_YELLOW}[4]${C_RESET} 📜 Ver últimos registros (logs) del servicio"
+    echo -e "  ${C_YELLOW}[5]${C_RESET} 📦 Reinstalar / Descargar binario badvpn-udpgw"
+    echo -e "  ${C_RED}[0]${C_RESET} ↩ Volver al menú anterior"
+    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────${C_RESET}"
+    
+    read -r -p " Seleccione una opción [0-5]: " opt || true
+    case "${opt:-}" in
+        1)
+            restart_service
+            press_enter
+            ;;
+        2)
+            stop_service
+            press_enter
+            ;;
+        3)
+            toggle_enable
+            press_enter
+            ;;
+        4)
+            clear
+            echo -e "${C_CYAN}Registros recientes de ${SERVICE_NAME}:${C_RESET}"
+            journalctl -u "${SERVICE_NAME}" -n 30 --no-pager 2>/dev/null || echo "No hay registros disponibles."
+            press_enter
+            ;;
+        5)
+            install_badvpn
+            press_enter
+            ;;
+        0)
+            break
+            ;;
+        *)
+            echo -e "${C_RED}Opción inválida.${C_RESET}"
+            sleep 1
+            ;;
+    esac
+done
+
+exit 0

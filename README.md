@@ -32,6 +32,8 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
   - [ssh-killuser](#ssh-killuser)
   - [ssh-userdel](#ssh-userdel)
   - [ssh-online](#ssh-online)
+  - [ssh-trial / trial](#-generador-de-cuentas-temporales--trial-ssh-trial--trial)
+  - [ssh-udpgw / udpgw](#-badvpn-udp-gateway-en-puerto-7300-ssh-udpgw--udpgw)
   - [ssh-httpcustom / httpcustom](#ssh-httpcustom--httpcustom)
   - [ssh-limiter (Demonio)](#ssh-limiter-demonio)
 - [Supervisión con Systemd](#-supervisión-con-systemd)
@@ -51,33 +53,49 @@ sudo menu
 ```
 *(También puedes usar los atajos `sudo tin` o `sudo vps`)*
 
-### Vista Previa del Dashboard:
+### Vista Previa del Dashboard (v2.1.0 - "Se Ve Todo"):
 ```text
-╔═══════════════════════════════════════╗
-║     ★ VPS-SSH-LIMITER MANAGER ★       ║
-╚═══════════════════════════════════════╝
- S.O.   : Ubuntu 22.04 (x86_64)
- Host/IP: vps1.martinvps.online
- Uptime : 14d 6h | Disco: 24%
- RAM    : [██░░░] 480M/2G | CPU: 1.2%
- Versión: [v1.8.4 - ACTUALIZADO]
-─────────────────────────────────────────
- SERVICIOS: SSH:✔ Drop:✔ WS:✔ Lim:✔
- CUENTAS  : Tot:12 | On:5 | Exp:1
- TRÁFICO  : 4.82 GB Transferidos
-─────────────────────────────────────────
- [1]  ► GESTIÓN DE USUARIOS
- [2]  ► MONITOR DE CONEXIONES Y DATOS
- [3]  ► BANNERS Y BIENVENIDA
- [4]  ► DEMONIO LIMITADOR (SYSTEMD)
- [5]  ► PROTOCOLOS Y PUERTOS
- [6]  ► OPTIMIZACIÓN Y SISTEMA
- [7]  ► DOMINIOS Y HOSTS 100% GRATIS
- [8]  ► GUÍA & ASISTENTE HTTP CUSTOM
- [9]  ► ACTUALIZAR SCRIPT
- [10] ► DESINSTALAR SCRIPT
- [0]  ► SALIR DEL PANEL
-═════════════════════════════════════════
+  ꧁࿇ VPS-SSH-LIMITER MANAGER ࿇꧂ 
+
+ ╭═══════════════════════════════════════════════════════════╮
+ │    Welcome to VPS-SSH-LIMITER by Martin Scripts / Tin     │
+ ╰═══════════════════════════════════════════════════════════╯
+ ╭═══════════════════════════════════════════════════════════╮
+ │ ● SYSTEM OS    = Ubuntu 22.04.5 LTS (x86_64)              │
+ │ ● SYSTEM CORE  = 2 Cores                                  │
+ │ ● SERVER RAM   = 957 / 2048 MB (46%)                      │
+ │ ● LOADCPU      = 2 %                                      │
+ │ ● DATE & TIME  = 15-09-2026 16:55:00                      │
+ │ ● UPTIME       = 5 days, 12 hours                         │
+ │ ● IP VPS       = 157.245.62.32                            │
+ │ ● DOMAIN       = tu-dominio.com                           │
+ ╰═══════════════════════════════════════════════════════════╯
+                  >>> INFORMATION ACCOUNT <<<                  
+         ═════════════════════════════════════════════         
+               SSH / OPENSSH     = 10 Cuentas
+               DROPBEAR / WS     = 5 Cuentas
+               ONLINE SESSIONS   = 3 Activas
+               EXPIRED USERS     = 1 Expirada
+               TOTAL TRAFFIC     = 2.45 GB Transferidos
+         ═════════════════════════════════════════════         
+             >>> github.com/sendeiser/tin-script <<<             
+ ╭══════════════┬══════════════┬══════════════┬══════════════╮
+ │ SSH     [ON] │ DROPBEAR [ON] │ WS PROXY [ON] │ UDPGW   [ON] │
+ ├──────────────┼──────────────┼──────────────┼──────────────┤
+ │ LIMITER [ON] │ TUNNEL  [ON] │ FAIL2BAN [ON] │ CRON    [ON] │
+ ╰══════════════┴══════════════┴══════════════┴══════════════╯
+ ╭═══════════════════┬═══════════════════┬═══════════════════╮
+ │ [01] USUARIOS SSH │ [06] BANNERS/TEXTO │ [11] CAMBIAR DOMIN │
+ │ [02] CREAR TRIAL  │ [07] REINICIAR TODO │ [12] TEST VELOCIDAD │
+ │ [03] UDPGW 7300   │ [08] LIMITADOR SSH │ [13] ACTUALIZAR VPS │
+ │ [04] MONITOR VIVO │ [09] PUERTOS Y RED │ [14] DESINSTALAR  │
+ │ [05] FICHA CLIENTE │ [10] LIMPIAR CACHÉ │ [00] SALIR PANEL  │
+ ╰═══════════════════┴═══════════════════┴═══════════════════╯
+ ╭═══════════════════════════════════════════════════════════╮
+ │ Script Version = v2.1.0 - Martin Scripts / Tin            │
+ ╰═══════════════════════════════════════════════════════════╯
+
+ Options [ 0 - 14 ] ❱❱❱ 
 ```
 
 ---
@@ -268,6 +286,44 @@ También puedes actualizar directamente desde la terminal con el comando:
 sudo update
 # o también:
 sudo ssh-update
+```
+
+---
+
+## ⏱️ Generador de Cuentas Temporales / Trial (`ssh-trial` / `trial`)
+
+Permite generar cuentas SSH/Dropbear/WS instantáneas con auto-expiración y auto-borrado garantizado para pruebas o demostraciones de clientes:
+
+- **Nombre aleatorio o personalizado:** `trialXXXX` generado en un clic.
+- **Duración configurable:** 30 minutos, 60 minutos (1h), 120 minutos (2h), 24 horas o minutos personalizados.
+- **Auto-borrado garantizado:** Usa temporizadores transitorios de `systemd-run` y demonio `at`. Al expirar el tiempo, el sistema desconecta las sesiones activas y elimina al usuario de `/etc/passwd`.
+- **Ficha instantánea para HTTP Custom:** Imprime la clave, fecha/hora exacta de vencimiento y el ticket directo `host:puerto@usuario:clave` listo para copiar y enviar al cliente por WhatsApp o Telegram.
+
+```bash
+# Ejecución interactiva:
+sudo trial
+# O también:
+sudo ssh-trial
+```
+
+---
+
+## 🎮 BadVPN UDP Gateway en Puerto 7300 (`ssh-udpgw` / `udpgw`)
+
+Habilita el reenvío de paquetes UDP encapsulados en el túnel SSH para aplicaciones como **HTTP Custom**, **OpenVPN** y clientes VPN móviles:
+
+- **Escucha interna:** `127.0.0.1:7300` con capacidad para 500 clientes concurrentes.
+- **Indispensable para:**
+  - Juegos en línea (Free Fire, Mobile Legends, PUBG Mobile, Call of Duty).
+  - Llamadas y videollamadas por VoIP (WhatsApp, Telegram, Discord).
+- **Supervisión Systemd:** Servicio `badvpn-udpgw.service` con autoarranque y reinicio automático.
+
+```bash
+# Menú de gestión de BadVPN UDPGW:
+sudo udpgw
+# Comandos rápidos:
+sudo ssh-udpgw --status
+sudo ssh-udpgw --restart
 ```
 
 ---
