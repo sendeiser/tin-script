@@ -5,7 +5,7 @@
 # ==============================================================================
 set -euo pipefail
 
-CURRENT_VERSION="2.1.0"
+CURRENT_VERSION="2.2.0"
 VERSION_FILE="/etc/vps-ssh-limiter/version"
 if [[ -f "$VERSION_FILE" ]]; then
     CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
@@ -70,7 +70,7 @@ echo -e "${C_GRAY} Comprobando última versión en GitHub...${C_RESET}"
 
 REMOTE_VERSION=""
 TIMESTAMP=$(date +%s)
-REMOTE_VERSION=$(curl -fsSL -m 3 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=${TIMESTAMP}" 2>/dev/null | tr -d '[:space:]' || true)
+REMOTE_VERSION=$(curl -fsSL -m 8 "https://raw.githubusercontent.com/sendeiser/tin-script/main/version?v=${TIMESTAMP}" 2>/dev/null | tr -d '[:space:]' || true)
 
 if [[ ! "$REMOTE_VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
     echo -e "${C_YELLOW}[AVISO]${C_RESET} No se pudo consultar la versión remota (o respuesta inválida)."
