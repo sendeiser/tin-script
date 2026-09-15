@@ -34,10 +34,28 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGHUP
 
 # ------------------------------------------------------------------------------
-# Función para verificar si una cuenta ha expirado
+# Función para verificar si una cuenta ha expirado (soporta trials y estándar)
 # ------------------------------------------------------------------------------
 is_account_expired() {
     local user="$1"
+    local now_epoch
+    now_epoch=$(date +%s)
+
+    # 1. Comprobar si es un trial registrado en trials.db
+    local trials_db="/etc/vps-ssh-limiter/trials.db"
+    if [[ -f "$trials_db" ]]; then
+        local t_line
+        t_line=$(grep "^${user}:" "$trials_db" 2>/dev/null | head -n1 || true)
+        if [[ -n "$t_line" ]]; then
+            local t_exp
+            t_exp=$(echo "$t_line" | cut -d: -f2)
+            if [[ -n "$t_exp" && "$t_exp" =~ ^[0-9]+$ && "$now_epoch" -ge "$t_exp" ]]; then
+                return 0 # Expirado
+            fi
+        fi
+    fi
+
+    # 2. Comprobar mediante chage (cuentas estándar)
     if command -v chage >/dev/null 2>&1; then
         local expiry_raw
         expiry_raw=$(chage -l "$user" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
@@ -45,8 +63,6 @@ is_account_expired() {
             local expiry_epoch
             expiry_epoch=$(date -d "$expiry_raw" +%s 2>/dev/null || true)
             if [[ -n "$expiry_epoch" ]]; then
-                local now_epoch
-                now_epoch=$(date +%s)
                 if [[ "$now_epoch" -gt "$expiry_epoch" ]]; then
                     return 0 # Expirado
                 fi
@@ -54,6 +70,43 @@ is_account_expired() {
         fi
     fi
     return 1 # No expirado
+}
+
+# ------------------------------------------------------------------------------
+# Limpieza automática de cuentas trial vencidas desde /etc/vps-ssh-limiter/trials.db
+# ------------------------------------------------------------------------------
+cleanup_expired_trials() {
+    local trials_db="/etc/vps-ssh-limiter/trials.db"
+    [[ -f "$trials_db" ]] || return 0
+
+    local now_epoch
+    now_epoch=$(date +%s)
+    local tmp_db
+    tmp_db=$(mktemp 2>/dev/null || echo "/tmp/trials.tmp.$$")
+    local had_entries=false
+
+    while IFS=: read -r t_user t_exp t_dur || [[ -n "$t_user" ]]; do
+        [[ -z "$t_user" || "$t_user" =~ ^# ]] && continue
+        had_entries=true
+        if [[ -n "$t_exp" && "$t_exp" =~ ^[0-9]+$ && "$now_epoch" -ge "$t_exp" ]]; then
+            log_msg "ALERT" "Cuenta trial vencida detectada: '$t_user' (${t_dur:-?}m). Procediendo a eliminación..."
+            if [[ -x /usr/local/bin/ssh-userdel ]]; then
+                /usr/local/bin/ssh-userdel "$t_user" >/dev/null 2>&1 || true
+            else
+                pkill -u "$t_user" -9 2>/dev/null || true
+                userdel -f -r "$t_user" 2>/dev/null || userdel -f "$t_user" 2>/dev/null || true
+            fi
+            rm -f "/etc/vps-ssh-limiter/trials/ticket-${t_user}.txt" 2>/dev/null || true
+        else
+            echo "${t_user}:${t_exp}:${t_dur}" >> "$tmp_db"
+        fi
+    done < "$trials_db"
+
+    if [[ "$had_entries" == true && -f "$tmp_db" ]]; then
+        mv -f "$tmp_db" "$trials_db" 2>/dev/null || rm -f "$tmp_db"
+    else
+        rm -f "$tmp_db" 2>/dev/null || true
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -217,6 +270,9 @@ while $RUNNING; do
 
     # Cargar mapa de conexiones universal
     load_all_user_connections
+
+    # Purgar cuentas trial vencidas
+    cleanup_expired_trials
 
     # Leer usuarios administrados con cuota LIM:<N> o UID >= 1000
     while IFS= read -r line || [[ -n "$line" ]]; do

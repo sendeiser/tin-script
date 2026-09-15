@@ -95,7 +95,13 @@ fi
 # ------------------------------------------------------------------------------
 # Eliminación del usuario del sistema
 # ------------------------------------------------------------------------------
-userdel -f "$USERNAME"
+userdel -f -r "$USERNAME" 2>/dev/null || userdel -f "$USERNAME"
+
+# Limpieza de registros y fichas de prueba si existieran
+if [[ -f /etc/vps-ssh-limiter/trials.db ]]; then
+    sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/trials.db 2>/dev/null || true
+fi
+rm -f "/etc/vps-ssh-limiter/trials/ticket-${USERNAME}.txt" 2>/dev/null || true
 
 echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
 echo -e "${C_CYAN}║${C_RESET}     ${C_BOLD}${C_WHITE}USUARIO ELIMINADO CON ÉXITO${C_RESET}       ${C_CYAN}║${C_RESET}"

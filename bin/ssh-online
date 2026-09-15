@@ -221,13 +221,45 @@ check_user_expiration() {
     local is_expired="NO"
     local expiry_formatted="Sin exp."
     local days_left="Ilimitado"
+    local now_epoch
+    now_epoch=$(date +%s)
 
+    # 1. Comprobar si es una cuenta trial activa en trials.db
+    local trials_db="/etc/vps-ssh-limiter/trials.db"
+    if [[ -f "$trials_db" ]]; then
+        local t_line
+        t_line=$(grep "^${user}:" "$trials_db" 2>/dev/null | head -n1 || true)
+        if [[ -n "$t_line" ]]; then
+            local t_exp
+            t_exp=$(echo "$t_line" | cut -d: -f2)
+            if [[ -n "$t_exp" && "$t_exp" =~ ^[0-9]+$ ]]; then
+                expiry_formatted=$(date -d "@$t_exp" +"%H:%M" 2>/dev/null || echo "Trial")
+                if [[ "$now_epoch" -ge "$t_exp" ]]; then
+                    days_left="TRIAL EXP"
+                    is_expired="SI"
+                else
+                    local rem_sec=$(( t_exp - now_epoch ))
+                    local rem_min=$(( rem_sec / 60 ))
+                    if [[ $rem_min -ge 60 ]]; then
+                        local rem_h=$(( rem_min / 60 ))
+                        local rem_m=$(( rem_min % 60 ))
+                        days_left="${rem_h}h ${rem_m}m"
+                    else
+                        days_left="${rem_min}m"
+                    fi
+                fi
+                echo "${expiry_formatted}|${is_expired}|${days_left}"
+                return
+            fi
+        fi
+    fi
+
+    # 2. Comprobación estándar con chage
     if command -v chage >/dev/null 2>&1; then
         expiry_raw=$(chage -l "$user" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
         if [[ -n "$expiry_raw" && "$expiry_raw" != "never" && "$expiry_raw" != "nunca" ]]; then
-            local expiry_epoch now_epoch
+            local expiry_epoch
             expiry_epoch=$(date -d "$expiry_raw" +%s 2>/dev/null || true)
-            now_epoch=$(date +%s)
             if [[ -n "$expiry_epoch" ]]; then
                 expiry_formatted=$(date -d "@$expiry_epoch" +%Y-%m-%d 2>/dev/null || echo "$expiry_raw")
                 local diff=$(( (expiry_epoch - now_epoch) / 86400 ))
