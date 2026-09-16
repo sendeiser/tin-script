@@ -111,6 +111,13 @@ load_all_user_connections() {
                     USER_ACTIVE_PIDS["$u"]="${cur} $p"
                 fi
             elif [[ "$comm" == *"sshd"* ]]; then
+                # En OpenSSH cada conexion autenticada crea un proceso unpriv [net] y una sesion @notty
+                # Ignorar [net] y [priv] para contabilizar exactamente 1 proceso por conexion real
+                local cmdline=""
+                [[ -r "/proc/$p/cmdline" ]] && cmdline=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null || true)
+                if [[ "$cmdline" == *"[net]"* || "$cmdline" == *"[priv]"* ]]; then
+                    continue
+                fi
                 local cur="${USER_ACTIVE_PIDS["$u"]:-}"
                 if [[ ! " $cur " =~ " $p " ]]; then
                     USER_SSH_COUNT["$u"]=$(( ${USER_SSH_COUNT["$u"]:-0} + 1 ))

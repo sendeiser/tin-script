@@ -131,24 +131,34 @@ def get_user_account_info(username):
     if m:
         limit = int(m.group(1))
 
-    # 2. Conexiones activas en tiempo real para este usuario
+    # 2. Conexiones activas en tiempo real para este usuario (filtrando helpers [net] de OpenSSH)
     active_connections = 0
     try:
         out = subprocess.run(["pgrep", "-u", username], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.5)
         if out.returncode == 0 and out.stdout:
             for pid_str in out.stdout.strip().splitlines():
                 pid = pid_str.strip()
-                if pid:
+                if pid and os.path.isdir(f"/proc/{pid}"):
                     comm_path = f"/proc/{pid}/comm"
-                    if os.path.exists(comm_path):
-                        try:
+                    cmdline_path = f"/proc/{pid}/cmdline"
+                    comm = ""
+                    cmdline = ""
+                    try:
+                        if os.path.exists(comm_path):
                             with open(comm_path, "r", encoding="utf-8", errors="ignore") as cf:
                                 comm = cf.read().strip()
-                                if "sshd" in comm or "dropbear" in comm:
-                                    active_connections += 1
-                        except Exception:
-                            active_connections += 1
-                    else:
+                        if os.path.exists(cmdline_path):
+                            with open(cmdline_path, "rb") as cmdf:
+                                cmdline = cmdf.read().replace(b"\x00", b" ").decode("utf-8", errors="ignore")
+                    except Exception:
+                        pass
+
+                    if "sshd" in comm:
+                        # En OpenSSH cada sesion tiene un helper [net] de separacion de privilegios; ignorarlo para no contar doble
+                        if "[net]" in cmdline or "[priv]" in cmdline:
+                            continue
+                        active_connections += 1
+                    elif "dropbear" in comm:
                         active_connections += 1
     except Exception:
         pass
@@ -482,8 +492,15 @@ def handle_client(client_sock, client_addr, target_host, target_port):
                 b"Access-Control-Max-Age: 86400\r\n"
                 b"Connection: close\r\n\r\n"
             )
-            client_sock.sendall(cors_headers)
-            client_sock.close()
+            try:
+                client_sock.sendall(cors_headers)
+                client_sock.shutdown(socket.SHUT_WR)
+            except Exception:
+                pass
+            try:
+                client_sock.close()
+            except Exception:
+                pass
             return
 
         # Comprobar rutas API (/api/user, /check, /user/, /api/server, /api/status)
@@ -567,9 +584,19 @@ def handle_client(client_sock, client_addr, target_host, target_port):
             )
             try:
                 client_sock.sendall(resp_http)
+                client_sock.shutdown(socket.SHUT_WR)
             except Exception:
                 pass
-            client_sock.close()
+            try:
+                client_sock.settimeout(0.3)
+                while client_sock.recv(1024):
+                    pass
+            except Exception:
+                pass
+            try:
+                client_sock.close()
+            except Exception:
+                pass
             return
 
         # ----------------------------------------------------------------------

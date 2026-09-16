@@ -210,7 +210,18 @@ load_all_user_connections() {
             [[ -r "/proc/$p/comm" ]] && comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
             # Solo contabilizar procesos de conexión SSH reales (OpenSSH sshd o Dropbear)
             # Ignorar shells (ssh-tunnel-shell, bash), systemd (--user), sd-pam, etc.
-            if [[ "$comm" == *"sshd"* || "$comm" == *"dropbear"* ]]; then
+            if [[ "$comm" == *"sshd"* ]]; then
+                # En OpenSSH ignorar helpers [net] y [priv] para no contabilizar doble por conexion
+                local cmdline=""
+                [[ -r "/proc/$p/cmdline" ]] && cmdline=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null || true)
+                if [[ "$cmdline" == *"[net]"* || "$cmdline" == *"[priv]"* ]]; then
+                    continue
+                fi
+                local cur="${USER_ACTIVE_PIDS["$u"]:-}"
+                if [[ ! " $cur " =~ " $p " ]]; then
+                    USER_ACTIVE_PIDS["$u"]="${cur} $p"
+                fi
+            elif [[ "$comm" == *"dropbear"* ]]; then
                 local cur="${USER_ACTIVE_PIDS["$u"]:-}"
                 if [[ ! " $cur " =~ " $p " ]]; then
                     USER_ACTIVE_PIDS["$u"]="${cur} $p"
