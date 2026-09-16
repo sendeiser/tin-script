@@ -5,7 +5,7 @@
 # ==============================================================================
 set -euo pipefail
 
-CURRENT_VERSION="2.2.6"
+CURRENT_VERSION="2.2.7"
 VERSION_FILE="/etc/vps-ssh-limiter/version"
 if [[ -f "$VERSION_FILE" ]]; then
     CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")

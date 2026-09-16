@@ -27,7 +27,7 @@ DEFAULT_LISTEN_PORT = 80
 DEFAULT_TARGET_HOST = "127.0.0.1"
 DEFAULT_TARGET_PORT = 22
 BUFFER_SIZE = 32768
-TIMEOUT = 60
+TIMEOUT = 120
 
 # Respuesta HTTP 101 Switching Protocols para WebSockets
 WS_101_RESPONSE = (
@@ -409,15 +409,7 @@ def forward_client_to_target(client_sock, target_sock):
         pass
     finally:
         try:
-            target_sock.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
-        try:
-            target_sock.close()
-        except Exception:
-            pass
-        try:
-            client_sock.close()
+            target_sock.shutdown(socket.SHUT_WR)
         except Exception:
             pass
 
@@ -439,15 +431,7 @@ def forward_target_to_client(target_sock, client_sock):
         pass
     finally:
         try:
-            client_sock.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
-        try:
-            client_sock.close()
-        except Exception:
-            pass
-        try:
-            target_sock.close()
+            client_sock.shutdown(socket.SHUT_WR)
         except Exception:
             pass
 
