@@ -100,7 +100,7 @@ if [[ "$TARGET" == "--all-exceeded" ]]; then
                 if [[ -n "$r_pid" && "$r_pid" =~ ^[0-9]+$ ]]; then
                     ranked+=("$r_pid")
                 fi
-            done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=-etimes 2>/dev/null || true)
+            done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=etimes 2>/dev/null || true)
 
             if [[ ${#ranked[@]} -eq 0 ]]; then
                 ranked=("${all_pids[@]}")

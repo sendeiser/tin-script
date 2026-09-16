@@ -353,25 +353,25 @@ while $RUNNING; do
             log_msg "WARN" "Límite excedido confirmado para usuario '$username': $total_active activas vs $limit permitidas (Excedente: $surplus_count)"
 
             # Obtener lista de PIDs ordenados por tiempo de vida transcurrido (etimes)
-            # ps -o pid=,etimes= -p <pids> --sort=-etimes
-            # --sort=-etimes lista de MAYOR a MENOR tiempo (el más viejo arriba)
+            # ps -o pid=,etimes= -p <pids> --sort=etimes
+            # --sort=etimes lista de MENOR a MAYOR tiempo (los más recientes arriba)
             pids_csv=$(IFS=,; echo "${all_pids[*]}")
             
-            # Clasificar procesos por etimes descendente
+            # Clasificar procesos por etimes ascendente (sesiones vivas recientes primero)
             ranked_pids=()
             while read -r r_pid r_etime; do
                 if [[ -n "$r_pid" && "$r_pid" =~ ^[0-9]+$ ]]; then
                     ranked_pids+=("$r_pid")
                 fi
-            done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=-etimes 2>/dev/null || true)
+            done < <(ps -o pid=,etimes= -p "$pids_csv" --sort=etimes 2>/dev/null || true)
 
             # Si ps fallara por alguna razón, respaldar con el orden original
             if [[ ${#ranked_pids[@]} -eq 0 ]]; then
                 ranked_pids=("${all_pids[@]}")
             fi
 
-            # Preservar las primeras $limit sesiones más antiguas (índices 0 a limit-1)
-            # Identificar los PIDs excedentes (desde el índice limit en adelante)
+            # Preservar las primeras $limit sesiones más RECIENTES (índices 0 a limit-1)
+            # Identificar los PIDs excedentes (sesiones antiguas / zombis residuales) desde el índice limit en adelante
             surplus_pids=()
             for (( i=limit; i<${#ranked_pids[@]}; i++ )); do
                 surplus_pids+=("${ranked_pids[i]}")
