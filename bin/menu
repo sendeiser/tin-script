@@ -321,7 +321,7 @@ draw_dashboard() {
     local traffic_txt
     traffic_txt=$(get_traffic_stats)
 
-    local current_ver="2.2.3"
+    local current_ver="2.2.4"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -621,13 +621,43 @@ menu_users() {
                 press_enter
                 ;;
             8)
-                if select_tunnel_user "🔍 DETALLES DE CUENTA"; then
+                if select_tunnel_user "🔍 DETALLES DE CUENTA Y CONEXIONES EN VIVO"; then
                     local u_name="$SELECTED_USER"
-                    echo -e " ${C_BORDER}─────────────────────────────────────────────────────────────${C_RESET}"
-                    id "$u_name"
-                    chage -l "$u_name" 2>/dev/null || true
-                    run_bin ssh-userlock "$u_name" status
-                    echo -e " ${C_BORDER}─────────────────────────────────────────────────────────────${C_RESET}"
+                    echo -e "\n ${C_BORDER}╭───────────────────────────────────────────────────────────╮${C_RESET}"
+                    echo -e " ${C_BORDER}│${C_RESET} ${C_LABEL}Usuario:${C_RESET} ${C_TITLE}${u_name}${C_RESET}"
+                    echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
+                    chage -l "$u_name" 2>/dev/null | grep -E "Account expires|Contraseña|Password|vence" || true
+                    run_bin ssh-userlock "$u_name" status 2>/dev/null || true
+                    echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
+                    echo -e " ${C_LABEL}★ SESIONES Y CONEXIONES ACTIVAS EN VIVO:${C_RESET}"
+                    local user_pids=()
+                    for p in $(pgrep -u "$u_name" 2>/dev/null || true); do
+                        local comm=""
+                        [[ -r "/proc/$p/comm" ]] && comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
+                        if [[ "$comm" == *"sshd"* || "$comm" == *"dropbear"* ]]; then
+                            user_pids+=("$p")
+                        fi
+                    done
+
+                    if [[ ${#user_pids[@]} -eq 0 ]]; then
+                        echo -e "  ${C_GRAY}○ No hay conexiones activas en este momento (Offline).${C_RESET}"
+                    else
+                        for p in "${user_pids[@]}"; do
+                            local etime=""
+                            etime=$(ps -o etime= -p "$p" 2>/dev/null | tr -d ' ' || echo "N/A")
+                            local proc_info=""
+                            proc_info=$(ps -o args= -p "$p" 2>/dev/null || echo "sshd")
+                            local remote_ip=""
+                            if command -v ss >/dev/null 2>&1; then
+                                remote_ip=$(ss -tnp 2>/dev/null | grep "pid=${p}," | awk '{print $5}' | head -n1 || true)
+                            fi
+                            echo -e "  ${C_GREEN}●${C_RESET} ${C_BOLD}PID $p${C_RESET} • Conectado hace: ${C_VAL}${etime}${C_RESET}"
+                            if [[ -n "$remote_ip" ]]; then
+                                echo -e "    ${C_LABEL}Origen / Socket:${C_RESET} ${C_VAL}${remote_ip}${C_RESET}"
+                            fi
+                        done
+                    fi
+                    echo -e " ${C_BORDER}╰───────────────────────────────────────────────────────────╯${C_RESET}"
                 fi
                 press_enter
                 ;;

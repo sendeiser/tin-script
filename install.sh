@@ -171,7 +171,7 @@ cat > "$DROPBEAR_DEFAULT" <<'EOF'
 # Configuración generada automáticamente por vps-ssh-limiter
 NO_START=0
 DROPBEAR_PORT=90
-DROPBEAR_EXTRA_ARGS="-p 109 -b /etc/vps-ssh-limiter/banner.net"
+DROPBEAR_EXTRA_ARGS="-p 109 -b /etc/vps-ssh-limiter/banner.net -K 20 -I 60"
 DROPBEAR_BANNER="/etc/vps-ssh-limiter/banner.net"
 DROPBEAR_RECEIVE_WINDOW=65536
 EOF
@@ -226,8 +226,8 @@ PermitEmptyPasswords no
 AllowTcpForwarding yes
 GatewayPorts yes
 TCPKeepAlive yes
-ClientAliveInterval 30
-ClientAliveCountMax 3
+ClientAliveInterval 15
+ClientAliveCountMax 2
 EOF
 
 if command -v sshd >/dev/null 2>&1; then
@@ -309,7 +309,7 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "2.2.3" > /etc/vps-ssh-limiter/version
+echo "2.2.4" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]] || grep -q "TARGET_PORT=143" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'

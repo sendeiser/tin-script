@@ -479,8 +479,8 @@ PermitEmptyPasswords no
 AllowTcpForwarding yes
 GatewayPorts yes
 TCPKeepAlive yes
-ClientAliveInterval 30
-ClientAliveCountMax 3
+ClientAliveInterval 15
+ClientAliveCountMax 2
 EOF_SSHD
 
         # Limpiar bloques Match User previos de vps-ssh-limiter
