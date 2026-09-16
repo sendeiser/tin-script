@@ -217,6 +217,16 @@ load_all_user_connections() {
                 if [[ "$cmdline" == *"[net]"* || "$cmdline" == *"[priv]"* ]]; then
                     continue
                 fi
+                # Si el proceso padre (PPID) tambien es sshd, es el subproceso hijo de la misma sesion: no contar doble
+                local ppid
+                ppid=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null || echo 0)
+                if [[ -n "$ppid" && "$ppid" -gt 1 && -d "/proc/$ppid" ]]; then
+                    local pcomm
+                    pcomm=$(cat "/proc/$ppid/comm" 2>/dev/null || true)
+                    if [[ "$pcomm" == *"sshd"* ]]; then
+                        continue
+                    fi
+                fi
                 local cur="${USER_ACTIVE_PIDS["$u"]:-}"
                 if [[ ! " $cur " =~ " $p " ]]; then
                     USER_ACTIVE_PIDS["$u"]="${cur} $p"
@@ -256,7 +266,16 @@ load_all_user_connections() {
                     [[ -r "/proc/$pid/comm" ]] && comm=$(cat "/proc/$pid/comm" 2>/dev/null || true)
                     if [[ "$comm" == *"dropbear"* ]]; then
                         local cur="${USER_ACTIVE_PIDS["$user"]:-}"
-                        if [[ ! " $cur " =~ " $pid " ]]; then
+                        local already_has_child=false
+                        for ep in $cur; do
+                            local e_ppid
+                            e_ppid=$(awk '{print $4}' "/proc/$ep/stat" 2>/dev/null || echo 0)
+                            if [[ "$e_ppid" -eq "$pid" ]]; then
+                                already_has_child=true
+                                break
+                            fi
+                        done
+                        if [[ "$already_has_child" == false && ! " $cur " =~ " $pid " ]]; then
                             USER_ACTIVE_PIDS["$user"]="${cur} $pid"
                         fi
                     fi
