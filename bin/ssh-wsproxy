@@ -16,6 +16,10 @@ import threading
 import signal
 import subprocess
 import time
+import re
+import json
+import datetime
+import urllib.parse
 
 CONFIG_DIR = "/etc/vps-ssh-limiter"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "wsproxy.conf")
@@ -70,6 +74,261 @@ def save_config(listen_port, target_host, target_port):
         f.write(f"LISTEN_PORT={listen_port}\n")
         f.write(f"TARGET_HOST={target_host}\n")
         f.write(f"TARGET_PORT={target_port}\n")
+
+
+def get_user_account_info(username):
+    """
+    Obtiene la informacion de cuenta de un usuario en el VPS:
+    - Validez de la cuenta y dias restantes
+    - Minutos restantes (si es cuenta trial)
+    - Fecha exacta de expiracion
+    - Limite de conexiones concurrentes
+    - Conexiones activas en tiempo real
+    - Trafico consumido
+    - Estado de bloqueo (passwd -S / /etc/shadow)
+    """
+    username = re.sub(r"[^a-zA-Z0-9_.-]", "", username).strip()
+    if not username:
+        return {
+            "status": "error",
+            "exists": False,
+            "message": "Nombre de usuario invalido o vacio."
+        }
+
+    now_epoch = int(time.time())
+    passwd_file = "/etc/passwd"
+    shadow_file = "/etc/shadow"
+    trials_file = "/etc/vps-ssh-limiter/trials.db"
+    traffic_file = "/etc/vps-ssh-limiter/traffic.db"
+
+    # 1. Verificar si existe en /etc/passwd
+    user_line = None
+    if os.path.exists(passwd_file):
+        try:
+            with open(passwd_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    parts = line.strip().split(":")
+                    if len(parts) >= 7 and parts[0] == username:
+                        user_line = parts
+                        break
+        except Exception:
+            pass
+
+    if not user_line:
+        return {
+            "status": "not_found",
+            "exists": False,
+            "username": username,
+            "message": f"El usuario '{username}' no existe en este servidor VPS."
+        }
+
+    uid = int(user_line[2]) if user_line[2].isdigit() else 0
+    gecos = user_line[4]
+
+    # Extraer limite de conexiones concurrentes de GECOS (ej: LIM:2)
+    limit = 1
+    m = re.search(r"LIM[:_=-]?([0-9]+)", gecos)
+    if m:
+        limit = int(m.group(1))
+
+    # 2. Conexiones activas en tiempo real para este usuario
+    active_connections = 0
+    try:
+        out = subprocess.run(["pgrep", "-u", username], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.5)
+        if out.returncode == 0 and out.stdout:
+            for pid_str in out.stdout.strip().splitlines():
+                pid = pid_str.strip()
+                if pid:
+                    comm_path = f"/proc/{pid}/comm"
+                    if os.path.exists(comm_path):
+                        try:
+                            with open(comm_path, "r", encoding="utf-8", errors="ignore") as cf:
+                                comm = cf.read().strip()
+                                if "sshd" in comm or "dropbear" in comm:
+                                    active_connections += 1
+                        except Exception:
+                            active_connections += 1
+                    else:
+                        active_connections += 1
+    except Exception:
+        pass
+
+    available_slots = max(0, limit - active_connections)
+
+    # 3. Trafico consumido
+    traffic_bytes = 0
+    traffic_human = "0 MB"
+    if os.path.exists(traffic_file):
+        try:
+            with open(traffic_file, "r", encoding="utf-8", errors="ignore") as tf:
+                for line in tf:
+                    parts = line.strip().split(":")
+                    if len(parts) >= 2 and parts[0] == username:
+                        if parts[1].isdigit():
+                            traffic_bytes = int(parts[1])
+                            if traffic_bytes < 1024 * 1024:
+                                traffic_human = f"{traffic_bytes / 1024:.1f} KB"
+                            elif traffic_bytes < 1024 * 1024 * 1024:
+                                traffic_human = f"{traffic_bytes / (1024 * 1024):.1f} MB"
+                            else:
+                                traffic_human = f"{traffic_bytes / (1024 * 1024 * 1024):.2f} GB"
+                        break
+        except Exception:
+            pass
+
+    # 4. Comprobar si es cuenta Trial en trials.db
+    is_trial = False
+    trial_exp = None
+    trial_dur = 60
+    if os.path.exists(trials_file):
+        try:
+            with open(trials_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    parts = line.strip().split(":")
+                    if len(parts) >= 3 and parts[0] == username:
+                        is_trial = True
+                        trial_exp = int(parts[1]) if parts[1].isdigit() else now_epoch
+                        trial_dur = int(parts[2]) if parts[2].isdigit() else 60
+                        break
+        except Exception:
+            pass
+
+    if is_trial and trial_exp is not None:
+        expired = now_epoch >= trial_exp
+        rem_sec = max(0, trial_exp - now_epoch)
+        rem_min = rem_sec // 60
+        exp_iso = datetime.datetime.fromtimestamp(trial_exp).strftime("%Y-%m-%d %H:%M:%S")
+        exp_date_short = datetime.datetime.fromtimestamp(trial_exp).strftime("%d/%m/%Y %H:%M")
+
+        if expired:
+            formatted = "Cuenta Trial Expirada"
+            status_text = "EXPIRED"
+            days_left = 0
+        else:
+            status_text = "ACTIVE"
+            days_left = max(1, rem_sec // 86400) if rem_sec >= 86400 else 0
+            if rem_min >= 60:
+                h = rem_min // 60
+                m = rem_min % 60
+                formatted = f"{h}h {m}m restantes ({exp_date_short})"
+            else:
+                formatted = f"{rem_min} min restantes ({exp_date_short})"
+
+        return {
+            "status": "ok",
+            "username": username,
+            "exists": True,
+            "account_type": "trial",
+            "is_trial": True,
+            "locked": False,
+            "expired": expired,
+            "status_text": status_text,
+            "limit": limit,
+            "active_connections": active_connections,
+            "available_slots": available_slots,
+            "traffic_bytes": traffic_bytes,
+            "traffic_human": traffic_human,
+            "days_left": days_left,
+            "minutes_left": rem_min,
+            "seconds_left": rem_sec,
+            "expiration_date": exp_iso,
+            "expiration_formatted": formatted,
+            "server_timestamp": now_epoch,
+            "server_time": datetime.datetime.fromtimestamp(now_epoch).strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+    # 5. Comprobar expiracion estandar en /etc/shadow y estado de bloqueo
+    exp_epoch = None
+    exp_iso = "Sin vencimiento"
+    expired = False
+    days_left = -1
+    status_text = "ACTIVE"
+    formatted = "Ilimitado (Sin vencimiento)"
+    locked = False
+
+    if os.path.exists(shadow_file):
+        try:
+            with open(shadow_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    parts = line.strip().split(":")
+                    if len(parts) >= 8 and parts[0] == username:
+                        pwd = parts[1]
+                        if pwd.startswith("!") or pwd.startswith("*"):
+                            locked = True
+                        exp_field = parts[7].strip()
+                        if exp_field and exp_field.isdigit():
+                            exp_days = int(exp_field)
+                            exp_epoch = exp_days * 86400
+                            exp_dt = datetime.datetime.fromtimestamp(exp_epoch)
+                            exp_iso = exp_dt.strftime("%Y-%m-%d")
+                            diff_sec = exp_epoch - now_epoch
+                            diff_days = diff_sec // 86400
+                            if diff_sec < 0:
+                                expired = True
+                                days_left = 0
+                                status_text = "EXPIRED"
+                                formatted = f"Expirado el {exp_iso}"
+                            else:
+                                expired = False
+                                days_left = max(0, diff_days)
+                                status_text = "LOCKED" if locked else "ACTIVE"
+                                formatted = f"{diff_days} dia(s) restante(s) ({exp_iso})"
+                        break
+        except Exception:
+            pass
+
+    # Si shadow no arrojo vencimiento o no fue legible, intentar con chage como fallback
+    if exp_epoch is None:
+        try:
+            ch_out = subprocess.run(["chage", "-l", username], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.5)
+            if ch_out.returncode == 0:
+                for line in ch_out.stdout.splitlines():
+                    if "Account expires" in line:
+                        exp_raw = line.split(":", 1)[1].strip()
+                        if exp_raw and exp_raw.lower() not in ("never", "nunca", ""):
+                            try:
+                                dt = datetime.datetime.strptime(exp_raw, "%b %d, %Y")
+                                exp_epoch = int(dt.timestamp())
+                                exp_iso = dt.strftime("%Y-%m-%d")
+                                diff_days = (exp_epoch - now_epoch) // 86400
+                                if diff_days < 0:
+                                    expired = True
+                                    days_left = 0
+                                    status_text = "EXPIRED"
+                                    formatted = f"Expirado el {exp_iso}"
+                                else:
+                                    days_left = max(0, diff_days)
+                                    status_text = "LOCKED" if locked else "ACTIVE"
+                                    formatted = f"{diff_days} dia(s) restante(s) ({exp_iso})"
+                            except Exception:
+                                pass
+                        break
+        except Exception:
+            pass
+
+    return {
+        "status": "ok",
+        "username": username,
+        "exists": True,
+        "account_type": "standard",
+        "is_trial": False,
+        "locked": locked,
+        "expired": expired,
+        "status_text": status_text,
+        "limit": limit,
+        "active_connections": active_connections,
+        "available_slots": available_slots,
+        "traffic_bytes": traffic_bytes,
+        "traffic_human": traffic_human,
+        "days_left": days_left,
+        "minutes_left": (days_left * 1440) if days_left >= 0 else -1,
+        "seconds_left": (days_left * 86400) if days_left >= 0 else -1,
+        "expiration_date": exp_iso,
+        "expiration_timestamp": exp_epoch,
+        "expiration_formatted": formatted,
+        "server_timestamp": now_epoch,
+        "server_time": datetime.datetime.fromtimestamp(now_epoch).strftime("%Y-%m-%d %H:%M:%S")
+    }
 
 
 def connect_target(target_host, target_port):
@@ -187,6 +446,115 @@ def handle_client(client_sock, client_addr, target_host, target_port):
             client_sock.close()
             return
 
+        # ----------------------------------------------------------------------
+        # Detección temprana de peticiones REST API o comprobación de cuenta
+        # ----------------------------------------------------------------------
+        first_line = initial_data.split(b"\r\n", 1)[0]
+        first_line_str = first_line.decode("utf-8", errors="ignore").strip()
+
+        # Comprobar método OPTIONS (CORS Preflight para navegadores y apps web/móvil)
+        if first_line_str.startswith("OPTIONS "):
+            cors_headers = (
+                b"HTTP/1.1 204 No Content\r\n"
+                b"Access-Control-Allow-Origin: *\r\n"
+                b"Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                b"Access-Control-Allow-Headers: Content-Type, Authorization, X-User, X-Requested-With\r\n"
+                b"Access-Control-Max-Age: 86400\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            client_sock.sendall(cors_headers)
+            client_sock.close()
+            return
+
+        # Comprobar rutas API (/api/user, /check, /user/, /api/server, /api/status)
+        is_api_route = False
+        api_method = ""
+        api_path = ""
+        m_http = re.match(r"^(GET|POST)\s+([^\s]+)\s+HTTP/", first_line_str, re.IGNORECASE)
+        if m_http:
+            api_method = m_http.group(1).upper()
+            api_path = m_http.group(2)
+            if (
+                api_path.startswith("/api/user")
+                or api_path.startswith("/check")
+                or api_path.startswith("/user/")
+                or api_path.startswith("/api/server")
+                or api_path.startswith("/api/status")
+            ):
+                is_api_route = True
+
+        if is_api_route:
+            username = ""
+            parsed_url = urllib.parse.urlparse(api_path)
+            q_params = urllib.parse.parse_qs(parsed_url.query)
+
+            if "u" in q_params:
+                username = q_params["u"][0]
+            elif "user" in q_params:
+                username = q_params["user"][0]
+            elif "username" in q_params:
+                username = q_params["username"][0]
+            elif parsed_url.path.startswith("/user/"):
+                username = parsed_url.path[6:].strip("/")
+
+            # Si es POST, leer el body (form-urlencoded o JSON)
+            if api_method == "POST" and not username:
+                body = b""
+                idx_body = initial_data.find(b"\r\n\r\n")
+                if idx_body != -1:
+                    body = initial_data[idx_body + 4:]
+                body_str = body.decode("utf-8", errors="ignore").strip()
+                if body_str:
+                    try:
+                        j_body = json.loads(body_str)
+                        username = j_body.get("username") or j_body.get("user") or j_body.get("u") or ""
+                    except Exception:
+                        p_body = urllib.parse.parse_qs(body_str)
+                        if "u" in p_body:
+                            username = p_body["u"][0]
+                        elif "user" in p_body:
+                            username = p_body["user"][0]
+                        elif "username" in p_body:
+                            username = p_body["username"][0]
+
+            if parsed_url.path in ("/api/server", "/api/status"):
+                resp_payload = {
+                    "status": "ok",
+                    "server": "vps-ssh-limiter",
+                    "service": "ssh-wsproxy",
+                    "timestamp": int(time.time()),
+                    "datetime": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+            elif username:
+                resp_payload = get_user_account_info(username)
+            else:
+                resp_payload = {
+                    "status": "error",
+                    "message": "Parametro de usuario no especificado. Uso: /api/user?u=<nombre> o /check?user=<nombre>"
+                }
+
+            json_bytes = json.dumps(resp_payload, ensure_ascii=False, indent=2).encode("utf-8")
+            status_code = b"200 OK" if resp_payload.get("status") == "ok" else (b"404 Not Found" if resp_payload.get("status") == "not_found" else b"400 Bad Request")
+
+            resp_http = (
+                b"HTTP/1.1 " + status_code + b"\r\n"
+                b"Content-Type: application/json; charset=utf-8\r\n"
+                b"Access-Control-Allow-Origin: *\r\n"
+                b"Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                b"Access-Control-Allow-Headers: Content-Type, Authorization, X-User, X-Requested-With\r\n"
+                b"Connection: close\r\n"
+                b"Content-Length: " + str(len(json_bytes)).encode("ascii") + b"\r\n\r\n" + json_bytes
+            )
+            try:
+                client_sock.sendall(resp_http)
+            except Exception:
+                pass
+            client_sock.close()
+            return
+
+        # ----------------------------------------------------------------------
+        # Tráfico de Túnel SSH / WebSocket
+        # ----------------------------------------------------------------------
         # Conectar al servicio destino SSH (con tolerancia y fallback)
         target_sock = connect_target(target_host, target_port)
         if not target_sock:
@@ -213,8 +581,36 @@ def handle_client(client_sock, client_addr, target_host, target_port):
                 else:
                     break
 
-            # Responder con 101 Switching Protocols
-            client_sock.sendall(WS_101_RESPONSE)
+            # Comprobar si el cliente WebSocket incluyó encabezado X-User o query param u=
+            ws_user = ""
+            m_user_hdr = re.search(r"\r\nx-user:\s*([^\r\n]+)", initial_data.decode("utf-8", errors="ignore"), re.IGNORECASE)
+            if m_user_hdr:
+                ws_user = m_user_hdr.group(1).strip()
+            else:
+                m_u_url = re.search(r"[?&]u=([^&\s]+)", first_line_str)
+                if m_u_url:
+                    ws_user = m_u_url.group(1).strip()
+
+            if ws_user:
+                u_info = get_user_account_info(ws_user)
+                days_left_str = str(u_info.get("days_left", -1))
+                expire_str = str(u_info.get("expiration_date", "never"))
+                limit_str = str(u_info.get("limit", 1))
+                status_str = str(u_info.get("status_text", "ACTIVE"))
+                custom_101 = (
+                    b"HTTP/1.1 101 Switching Protocols\r\n"
+                    b"Upgrade: websocket\r\n"
+                    b"Connection: Upgrade\r\n"
+                    b"X-Account-User: " + ws_user.encode("utf-8", errors="ignore") + b"\r\n"
+                    b"X-Account-Days-Left: " + days_left_str.encode("ascii") + b"\r\n"
+                    b"X-Account-Expire: " + expire_str.encode("ascii") + b"\r\n"
+                    b"X-Account-Limit: " + limit_str.encode("ascii") + b"\r\n"
+                    b"X-Account-Status: " + status_str.encode("ascii") + b"\r\n\r\n"
+                )
+                client_sock.sendall(custom_101)
+            else:
+                # Responder con 101 Switching Protocols estándar
+                client_sock.sendall(WS_101_RESPONSE)
 
             # Si quedaron bytes residuales y corresponden a SSH, enviarlos al target
             if buffer:

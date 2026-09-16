@@ -16,6 +16,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
 - [Panel Interactivo Principal (menu / tin / vps)](#-panel-interactivo-principal-menu--tin--vps)
 - [Gestión y Creación de Dominios / Host](#-gestión-y-creación-de-dominios--host-cloudflare--duckdns--gratis)
 - [Guía y Conexión en HTTP Custom (Android / iOS)](#-guía-y-conexión-en-http-custom-android--ios)
+- [API REST y Consulta de Cuentas para Apps Móviles](#-api-rest-y-consulta-de-vigencia-para-apps-móviles-android--flutter--ios)
 - [Actualizador Automático en el Menú](#-actualizador-automático-en-el-menú)
 - [Arquitectura y Principios de Diseño](#-arquitectura-y-principios-de-diseño)
 - [Instalación](#-instalación)
@@ -34,6 +35,7 @@ Diseñado siguiendo estándares DevOps para entornos de producción, túneles se
   - [ssh-online](#ssh-online)
   - [ssh-trial / trial](#-generador-de-cuentas-temporales--trial-ssh-trial--trial)
   - [ssh-udpgw / udpgw](#-badvpn-udp-gateway-en-puerto-7300-ssh-udpgw--udpgw)
+  - [ssh-api / api](#ssh-api--api)
   - [ssh-httpcustom / httpcustom](#ssh-httpcustom--httpcustom)
   - [ssh-limiter (Demonio)](#ssh-limiter-demonio)
 - [Supervisión con Systemd](#-supervisión-con-systemd)
@@ -53,10 +55,10 @@ sudo menu
 ```
 *(También puedes usar los atajos `sudo tin` o `sudo vps`)*
 
-### Vista Previa del Dashboard (v2.2.4 - Minimalista Móvil):
+### Vista Previa del Dashboard (v2.2.5 - Minimalista Móvil):
 ```text
  ╭───────────────────────────────────────────────────────────╮
- │  ⚡ TIN SCRIPTS • VPS MANAGER             v2.2.4 [ONLINE]  │
+ │  ⚡ TIN SCRIPTS • VPS MANAGER             v2.2.5 [ONLINE]  │
  ├─────────────────────────────┬─────────────────────────────┤
  │ OS     : Ubuntu 22.04 LTS   │ IP     : 157.245.62.32      │
  │ Host   : tu-dominio.com     │ Uptime : 5d 12h 30m         │
@@ -206,6 +208,178 @@ Al crear cualquier cuenta desde el menú o con `ssh-useradd`, se genera automát
 - **Activar Auto-Ping:** En el menú lateral de HTTP Custom, activa **Auto Ping** con un intervalo de **3 a 5 segundos** para mantener el socket SSH siempre activo.
 - **Batería sin restricciones:** En Android -> Ajustes -> Aplicaciones -> HTTP Custom -> Batería -> "Sin restricciones" para evitar que el sistema cierre la app en segundo plano.
 - **Respetar el límite simultáneo:** Si el cliente supera el límite asignado (por ejemplo, 2 conexiones), el demonio `ssh-limiter` cerrará de inmediato la conexión excedente más reciente.
+
+---
+
+## 🌐 API REST y Consulta de Vigencia para Apps Móviles (Android / Flutter / iOS)
+
+Para que tus aplicaciones clientes personalizadas (apps propias en Android, Flutter, iOS, paneles web o sistemas de ventas) puedan **mostrar cuántos días les quedan a los usuarios o su fecha exacta de vencimiento**, el script incorpora una **API REST de alto rendimiento en el puerto 80** ejecutada nativamente por `ssh-wsproxy`.
+
+### 🚀 Ventajas del Sistema:
+- **Cero Puertos Adicionales:** Funciona sobre el mismo puerto 80 ya abierto para WebSocket / Cloudflare CDN. No requiere Nginx, Apache ni abrir puertos extra en el firewall.
+- **Ultra Rápido (< 2 ms):** Consulta `/etc/passwd`, `/etc/shadow` y la base de datos de pruebas temporales directamente en memoria con Python.
+- **CORS Habilitado (`Access-Control-Allow-Origin: *`):** Puede ser consultado directamente desde navegadores web, apps híbridas y frameworks móviles sin bloqueos de origen cruzado.
+- **Soporte para Pruebas (Trials) y Cuentas Estándar:** Si el usuario es una cuenta trial, devuelve los **minutos restantes** con cuenta regresiva. Si es estándar, devuelve los **días restantes** y fecha formateada.
+- **Triple Método de Integración:**
+  1. **API REST HTTP Directa:** `GET http://vps-ip/api/user?u=nombre`
+  2. **Inyección en Handshake WebSocket:** Envía el encabezado `X-User: nombre` al conectar por WebSocket y recibe `X-Account-Days-Left` en el `101 Switching Protocols`.
+  3. **Metadatos en Banner SSH:** Comentario estructurado `<!-- VPS_DATA:{...} -->` emitido al iniciar la sesión de túnel.
+
+---
+
+### 1. Endpoints de la API REST
+
+| Método | Endpoint | Descripción | Parámetros |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/user?u=<nombre>` | Consulta los datos completos de una cuenta | `u` o `user` o `username` |
+| `GET` | `/check?user=<nombre>` | Endpoint alternativo estilo VPN Manager | `user` o `u` |
+| `GET` | `/user/<nombre>` | Ruta amigable directa | En la URL |
+| `POST`| `/api/user` | Consulta enviando JSON o Form-Data | `{"username":"martin"}` |
+| `GET` | `/api/server` | Estado y telemetría básica del servidor | Ninguno |
+
+#### Ejemplo de Respuesta JSON (`200 OK`):
+```json
+{
+  "status": "ok",
+  "username": "martin",
+  "exists": true,
+  "account_type": "standard",
+  "is_trial": false,
+  "locked": false,
+  "expired": false,
+  "status_text": "ACTIVE",
+  "limit": 2,
+  "active_connections": 1,
+  "available_slots": 1,
+  "traffic_bytes": 157286400,
+  "traffic_human": "150.0 MB",
+  "days_left": 29,
+  "minutes_left": 41760,
+  "seconds_left": 2505600,
+  "expiration_date": "2026-10-15",
+  "expiration_timestamp": 1792022400,
+  "expiration_formatted": "29 día(s) restante(s) (2026-10-15)",
+  "server_timestamp": 1789516800,
+  "server_time": "2026-09-15 21:00:00"
+}
+```
+
+*Si es una cuenta de prueba rápida (Trial), la respuesta incluye:*
+```json
+{
+  "status": "ok",
+  "username": "trial742",
+  "exists": true,
+  "account_type": "trial",
+  "is_trial": true,
+  "expired": false,
+  "days_left": 0,
+  "minutes_left": 45,
+  "seconds_left": 2700,
+  "expiration_formatted": "45 min restantes (15/09/2026 21:45)"
+}
+```
+
+---
+
+### 2. Ejemplos de Código Listos para Copiar
+
+#### En tu App Android (Kotlin + OkHttp):
+```kotlin
+import okhttp3.*
+import org.json.JSONObject
+import java.io.IOException
+
+fun consultarVencimientoVPS(vpsHost: String, usuario: String) {
+    val client = OkHttpClient()
+    val url = "http://$vpsHost/api/user?u=$usuario"
+    val request = Request.Builder().url(url).build()
+
+    client.newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            // Manejar error de conexión
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            response.body?.string()?.let { jsonStr ->
+                val json = JSONObject(jsonStr)
+                if (json.optBoolean("exists", false)) {
+                    val daysLeft = json.optInt("days_left", -1)
+                    val isTrial = json.optBoolean("is_trial", false)
+                    val minLeft = json.optInt("minutes_left", 0)
+                    val expFormatted = json.optString("expiration_formatted", "")
+                    val isExpired = json.optBoolean("expired", false)
+
+                    // Mostrar en el TextView de tu aplicación:
+                    runOnUiThread {
+                        if (isExpired) {
+                            txtDias.text = "CUENTA EXPIRADA"
+                        } else if (isTrial) {
+                            txtDias.text = "Prueba: $minLeft min restantes"
+                        } else {
+                            txtDias.text = "Te quedan $daysLeft días ($expFormatted)"
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+```
+
+#### En Flutter / Dart:
+```dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+Future<Map<String, dynamic>?> checkVpsAccount(String vpsHost, String username) async {
+  final url = Uri.parse('http://$vpsHost/api/user?u=$username');
+  try {
+    final response = await http.get(url).timeout(const Duration(seconds: 4));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      // data['days_left'] -> Días que le quedan
+      // data['expiration_formatted'] -> Cadena amigable para mostrar
+      // data['active_connections'] -> Conexiones en vivo
+      return data;
+    }
+  } catch (e) {
+    print("Error consultando VPS: $e");
+  }
+  return null;
+}
+```
+
+#### Mediante cURL:
+```bash
+curl -s "http://tu-vps.com/api/user?u=martin" | jq .
+```
+
+---
+
+### 3. Inyección Automática en Handshake WebSocket (HTTP 101)
+
+Si tu aplicación conecta al túnel mediante WebSocket sobre el puerto 80 (Cloudflare CDN o directo), puedes enviar el encabezado:
+```http
+GET / HTTP/1.1
+Host: tu-dominio.com
+Upgrade: websocket
+Connection: Upgrade
+X-User: martin
+```
+
+El servidor responderá inmediatamente en el `101 Switching Protocols`:
+```http
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+X-Account-User: martin
+X-Account-Days-Left: 29
+X-Account-Expire: 2026-10-15
+X-Account-Limit: 2
+X-Account-Status: ACTIVE
+```
+De esta forma, la app obtiene la vigencia directamente durante la negociación de conexión del túnel sin necesidad de una llamada HTTP previa.
 
 ---
 
@@ -573,6 +747,26 @@ ssh-httpcustom --guide
 
 # Ver ejemplos de Payloads (WebSocket, CDN, Direct, Proxy):
 ssh-httpcustom --payloads
+```
+
+---
+
+### `ssh-api` / `api`
+
+Consulta la vigencia, fecha de vencimiento y estado de cuentas VPS mediante la API REST o consola, con generador de código para aplicaciones:
+
+```bash
+# Consultar cuenta en formato ficha interactiva:
+ssh-api martin
+
+# O también con el atajo corto:
+api martin
+
+# Obtener respuesta en formato JSON puro (para scripts/curl):
+ssh-api --json martin
+
+# Ver ejemplos de código listos para Android (Kotlin) y Flutter (Dart):
+ssh-api --code
 ```
 
 ---

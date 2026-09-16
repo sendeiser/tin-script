@@ -267,7 +267,7 @@ log_success "Shells restringidas y persistentes configuradas para autenticación
 log_info "4/5 Instalando comandos y panel interactivo en /usr/local/bin..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy ssh-tunnel-shell ssh-trial ssh-udpgw menu)
+BIN_LIST=(ssh-useradd ssh-userdel ssh-usermod ssh-userlock ssh-killuser ssh-online ssh-limiter ssh-update ssh-banner ssh-httpcustom ssh-domain ssh-wsproxy ssh-tunnel-shell ssh-trial ssh-udpgw ssh-api menu)
 
 # Si se ejecuta desde un archivo de script local real que contiene bin/menu
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "$SCRIPT_DIR/bin/menu" ]]; then
@@ -302,14 +302,15 @@ ln -sf /usr/local/bin/ssh-tunnel-shell /bin/ssh-tunnel-shell
 ln -sf /usr/local/bin/ssh-trial /usr/local/bin/trial
 ln -sf /usr/local/bin/ssh-udpgw /usr/local/bin/udpgw
 ln -sf /usr/local/bin/ssh-udpgw /usr/local/bin/badudp
+ln -sf /usr/local/bin/ssh-api /usr/local/bin/api
 
-for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy tunnel-shell trial udpgw badudp; do
+for bin_name in "${BIN_LIST[@]}" tin vps update banner httpcustom custom domain dominio wsproxy tunnel-shell trial udpgw badudp api; do
     ln -sf "/usr/local/bin/${bin_name}" "/usr/bin/${bin_name}" 2>/dev/null || true
 done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "2.2.4" > /etc/vps-ssh-limiter/version
+echo "2.2.5" > /etc/vps-ssh-limiter/version
 
 if [[ ! -f /etc/vps-ssh-limiter/wsproxy.conf ]] || grep -q "TARGET_PORT=143" /etc/vps-ssh-limiter/wsproxy.conf 2>/dev/null; then
     cat > /etc/vps-ssh-limiter/wsproxy.conf <<'EOF'
@@ -324,7 +325,7 @@ if [[ -x /usr/local/bin/ssh-banner ]]; then
     /usr/local/bin/ssh-banner --apply >/dev/null 2>&1 || true
 fi
 
-log_success "Binarios y atajos ('menu', 'update', 'banner', 'domain', 'httpcustom', 'wsproxy', 'trial', 'udpgw', 'tin', 'vps') vinculados."
+log_success "Binarios y atajos ('menu', 'update', 'banner', 'domain', 'httpcustom', 'wsproxy', 'trial', 'udpgw', 'api', 'tin', 'vps') vinculados."
 
 # ------------------------------------------------------------------------------
 # 5. Instalación y Activación de Demonios Systemd (ssh-limiter & ssh-wsproxy)

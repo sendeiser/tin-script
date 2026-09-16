@@ -34,8 +34,32 @@ _exp_date="Sin exp."
 _days_left="Ilimitado"
 _limit="1"
 
-# Vencimiento y días restantes (chage)
-if command -v chage >/dev/null 2>&1 && id "$u" >/dev/null 2>&1; then
+# Vencimiento y días restantes (trials.db y chage)
+_diff=-1
+if [[ -f /etc/vps-ssh-limiter/trials.db ]]; then
+    _t_line=$(grep "^${u}:" /etc/vps-ssh-limiter/trials.db 2>/dev/null | head -n1 || true)
+    if [[ -n "$_t_line" ]]; then
+        _t_exp=$(echo "$_t_line" | cut -d: -f2)
+        if [[ -n "$_t_exp" && "$_t_exp" =~ ^[0-9]+$ ]]; then
+            _exp_date=$(date -d "@$_t_exp" '+%d/%m/%Y %H:%M' 2>/dev/null || true)
+            _t_rem=$(( _t_exp - _now_epoch ))
+            if [[ $_t_rem -gt 0 ]]; then
+                _t_min=$(( _t_rem / 60 ))
+                if [[ $_t_min -ge 60 ]]; then
+                    _days_left="$(( _t_min / 60 ))h $(( _t_min % 60 ))m (Trial)"
+                else
+                    _days_left="${_t_min} min (Trial)"
+                fi
+                _diff=$(( _t_rem / 86400 ))
+            else
+                _days_left="EXPIRADO"
+                _diff=0
+            fi
+        fi
+    fi
+fi
+
+if [[ "$_diff" -eq -1 ]] && command -v chage >/dev/null 2>&1 && id "$u" >/dev/null 2>&1; then
     _exp_raw=$(chage -l "$u" 2>/dev/null | grep -i "^Account expires" | cut -d: -f2- | xargs || true)
     if [[ -n "$_exp_raw" && "$_exp_raw" != "never" && "$_exp_raw" != "nunca" ]]; then
         _exp_epoch=$(date -d "$_exp_raw" +%s 2>/dev/null || true)
@@ -203,7 +227,12 @@ EOBANNER
 fi
 
 # --------------------------------------------------------------------------
-# 3. Mantener la sesión activa (para port-forwarding / túnel VPN)
+# 3. Metadatos estructurados para apps móviles (Android, Flutter, iOS)
+# --------------------------------------------------------------------------
+echo "<!-- VPS_DATA:{\"user\":\"${u}\",\"days\":${_diff:--1},\"expire\":\"${_exp_date}\",\"limit\":${_limit:-1}} -->"
+
+# --------------------------------------------------------------------------
+# 4. Mantener la sesión activa (para port-forwarding / túnel VPN)
 # --------------------------------------------------------------------------
 while read -r _ 2>/dev/null; do
     :

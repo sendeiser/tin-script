@@ -321,7 +321,7 @@ draw_dashboard() {
     local traffic_txt
     traffic_txt=$(get_traffic_stats)
 
-    local current_ver="2.2.4"
+    local current_ver="2.2.5"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -536,10 +536,11 @@ menu_users() {
         echo -e "  ${C_NUM}[7]${C_RESET} ❌ Eliminar usuario del sistema"
         echo -e "  ${C_NUM}[8]${C_RESET} 🔍 Ver detalles de una cuenta"
         echo -e "  ${C_NUM}[9]${C_RESET} 📱 Ficha cliente (HTTP Custom)"
+        echo -e "  ${C_NUM}[10]${C_RESET} 🌐 API de Consulta (Para Apps Móviles)"
         echo -e "  ${C_RED}[0]${C_RESET} ↩️  Volver al Menú Principal"
         echo -e " ${C_BORDER}─────────────────────────────────────────────────────────────${C_RESET}"
         local opt_user=""
-        read -r -p "  ❱❱❱ Seleccione una opción [0-9]: " opt_user || true
+        read -r -p "  ❱❱❱ Seleccione una opción [0-10]: " opt_user || true
 
         case "${opt_user:-}" in
             1)
@@ -657,6 +658,11 @@ menu_users() {
                             fi
                         done
                     fi
+                    local server_dom
+                    server_dom=$(get_server_domain)
+                    echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
+                    echo -e " ${C_LABEL}🌐 URL DIRECTA API REST (Para App Móvil):${C_RESET}"
+                    echo -e "  ${C_VAL}http://${server_dom}/api/user?u=${u_name}${C_RESET}"
                     echo -e " ${C_BORDER}╰───────────────────────────────────────────────────────────╯${C_RESET}"
                 fi
                 press_enter
@@ -669,6 +675,11 @@ menu_users() {
                     clear
                     run_bin ssh-httpcustom "$u_name" "${u_pass:-********}" || true
                 fi
+                press_enter
+                ;;
+            10)
+                clear
+                run_bin ssh-api
                 press_enter
                 ;;
             0)
