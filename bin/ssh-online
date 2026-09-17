@@ -379,7 +379,6 @@ if [[ "$JSON_OUTPUT" == true ]]; then
             status="ACTIVO"
         fi
 
-        local u_pass
         u_pass=$(get_user_password "$user")
 
         json_entries+=("{\"username\":\"$user\",\"password\":\"$u_pass\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"traffic_bytes\":$u_traffic,\"traffic_formatted\":\"$u_traffic_fmt\",\"expiration\":\"$exp_date\",\"days_left\":\"$days_left\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
@@ -422,7 +421,6 @@ if [[ "$WIDE_TABLE" == true ]]; then
         total_conn=$((ssh_count + dropbear_count))
         u_bytes=$(get_user_traffic_bytes "$user")
         u_traffic_str=$(format_bytes "$u_bytes")
-        local u_pass
         u_pass=$(get_user_password "$user")
 
         TOTAL_ALL_CONN=$((TOTAL_ALL_CONN + total_conn))
@@ -531,7 +529,6 @@ for entry in "${USERS_LIST[@]}"; do
         bullet="${C_WHITE}○${C_RESET}"
     fi
 
-    local u_pass
     u_pass=$(get_user_password "$user")
 
     echo -e " ${C_BOLD}[${idx}]${C_RESET} ${bullet} ${C_BOLD}${C_WHITE}${user}${C_RESET} : ${badge}"

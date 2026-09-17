@@ -310,7 +310,7 @@ done
 
 # Registrar versión instalada y configuración por defecto
 mkdir -p /etc/vps-ssh-limiter
-echo "2.2.9" > /etc/vps-ssh-limiter/version
+echo "2.2.10" > /etc/vps-ssh-limiter/version
 touch /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
 chmod 600 /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
 

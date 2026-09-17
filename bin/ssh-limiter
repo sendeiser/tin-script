@@ -375,7 +375,7 @@ while $RUNNING; do
             # Durante reconexiones en apps móviles (como HTTP Custom), la sesión previa puede
             # tardar 1-2 segundos en terminar de liberarse en el kernel (TCP FIN/WAIT).
             # Conceder 1 ciclo de gracia (3s) para verificar si persiste antes de matar.
-            local strikes="${USER_SURPLUS_STRIKES["$username"]:-0}"
+            strikes="${USER_SURPLUS_STRIKES["$username"]:-0}"
             if [[ $strikes -eq 0 ]]; then
                 USER_SURPLUS_STRIKES["$username"]=1
                 log_msg "WARN" "Aviso para '$username': $total_active activas vs $limit permitidas (posible solapamiento de reconexión). Verificando en próximo ciclo..."
