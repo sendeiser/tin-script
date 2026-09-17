@@ -151,7 +151,14 @@ else
 fi
 
 # Asignación segura de contraseña
-echo "${USERNAME}:${PASSWORD}" | chpasswd
+echo "${USERNAME}:${PASSWORD}" | chpasswd 2>/dev/null || echo -e "${PASSWORD}\n${PASSWORD}" | passwd "$USERNAME" 2>/dev/null || true
+
+# Registro seguro de credenciales para administración del servidor
+mkdir -p /etc/vps-ssh-limiter
+touch /etc/vps-ssh-limiter/passwords.db
+chmod 600 /etc/vps-ssh-limiter/passwords.db
+sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
+echo "${USERNAME}:${PASSWORD}" >> /etc/vps-ssh-limiter/passwords.db
 
 # ------------------------------------------------------------------------------
 # Confirmación de salida formateada
@@ -159,6 +166,7 @@ echo "${USERNAME}:${PASSWORD}" | chpasswd
 echo -e "${C_GREEN}✔ Usuario creado exitosamente${C_RESET}"
 echo -e "${C_GRAY}─────────────────────────────────────────${C_RESET}"
 printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Usuario:" "$USERNAME"
+printf "  ${C_BOLD}%-15s${C_RESET} %b%s%b\n" "Contraseña:" "$C_YELLOW" "$PASSWORD" "$C_RESET"
 printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Límite:" "${LIMIT} conexión(es)"
 printf "  ${C_BOLD}%-15s${C_RESET} %s (%s d)\n" "Vencimiento:" "$EXPIRY_DATE" "$DAYS"
 printf "  ${C_BOLD}%-15s${C_RESET} %s\n" "Shell:" "$RESTRICTED_SHELL"

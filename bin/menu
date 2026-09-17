@@ -99,6 +99,18 @@ get_server_domain() {
     fi
 }
 
+get_user_password() {
+    local u="$1"
+    local p=""
+    if [[ -f /etc/vps-ssh-limiter/passwords.db ]]; then
+        p=$(grep "^${u}:" /etc/vps-ssh-limiter/passwords.db 2>/dev/null | cut -d: -f2- | head -n1 || true)
+    fi
+    if [[ -z "$p" && -f "/etc/vps-ssh-limiter/trials/ticket-${u}.txt" ]]; then
+        p=$(grep -i "^Contraseña" "/etc/vps-ssh-limiter/trials/ticket-${u}.txt" 2>/dev/null | cut -d: -f2- | tr -d ' ' || true)
+    fi
+    echo "$p"
+}
+
 get_ram_info() {
     local mem_data total_m used_m pct
     if command -v free >/dev/null 2>&1; then
@@ -321,7 +333,7 @@ draw_dashboard() {
     local traffic_txt
     traffic_txt=$(get_traffic_stats)
 
-    local current_ver="2.2.5"
+    local current_ver="2.2.9"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -569,12 +581,17 @@ menu_users() {
             4)
                 if select_tunnel_user "✏️  RENOVAR / MODIFICAR USUARIO"; then
                     local u_name="$SELECTED_USER"
+                    local u_cur_pass
+                    u_cur_pass=$(get_user_password "$u_name")
                     echo -e "\n${C_LABEL}Modificando usuario:${C_RESET} ${C_TITLE}${u_name}${C_RESET}"
+                    if [[ -n "$u_cur_pass" ]]; then
+                        echo -e "${C_LABEL}Contraseña actual  :${C_RESET} ${C_NUM}${u_cur_pass}${C_RESET}"
+                    fi
                     echo -e "Deje en blanco los campos que NO desee cambiar:"
                     local m_days="" m_limit="" m_pass=""
                     read -r -p " Días adicionales a renovar (ej: 30): " m_days || true
                     read -r -p " Nuevo límite de conexiones (ej: 3): " m_limit || true
-                    read -r -p " Nueva contraseña: " m_pass || true
+                    read -r -p " Nueva contraseña (deje vacío para mantener): " m_pass || true
 
                     local cmd_args=("$u_name")
                     if [[ -n "${m_days:-}" ]]; then cmd_args+=(--days "$m_days"); fi
@@ -624,8 +641,12 @@ menu_users() {
             8)
                 if select_tunnel_user "🔍 DETALLES DE CUENTA Y CONEXIONES EN VIVO"; then
                     local u_name="$SELECTED_USER"
+                    local u_pass
+                    u_pass=$(get_user_password "$u_name")
+
                     echo -e "\n ${C_BORDER}╭───────────────────────────────────────────────────────────╮${C_RESET}"
-                    echo -e " ${C_BORDER}│${C_RESET} ${C_LABEL}Usuario:${C_RESET} ${C_TITLE}${u_name}${C_RESET}"
+                    echo -e " ${C_BORDER}│${C_RESET} ${C_LABEL}Usuario    :${C_RESET} ${C_TITLE}${u_name}${C_RESET}"
+                    echo -e " ${C_BORDER}│${C_RESET} ${C_LABEL}Contraseña :${C_RESET} ${C_NUM}${u_pass:-[No registrada]}${C_RESET}"
                     echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
                     chage -l "$u_name" 2>/dev/null | grep -E "Account expires|Contraseña|Password|vence" || true
                     run_bin ssh-userlock "$u_name" status 2>/dev/null || true
@@ -670,8 +691,16 @@ menu_users() {
             9)
                 if select_tunnel_user "📱 GENERAR FICHA HTTP CUSTOM"; then
                     local u_name="$SELECTED_USER"
-                    local u_pass=""
-                    read -r -p " Contraseña (opcional para mostrar en ficha): " u_pass || true
+                    local u_pass
+                    u_pass=$(get_user_password "$u_name")
+                    if [[ -n "$u_pass" ]]; then
+                        echo -e "\n ${C_LABEL}Contraseña detectada:${C_RESET} ${C_NUM}${u_pass}${C_RESET}"
+                        local in_pass=""
+                        read -r -p " Presione [Enter] para usarla o ingrese otra: " in_pass || true
+                        u_pass="${in_pass:-$u_pass}"
+                    else
+                        read -r -p " Contraseña (opcional para mostrar en ficha): " u_pass || true
+                    fi
                     clear
                     run_bin ssh-httpcustom "$u_name" "${u_pass:-********}" || true
                 fi

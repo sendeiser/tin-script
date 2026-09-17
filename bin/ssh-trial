@@ -187,6 +187,13 @@ fi
 echo "${USERNAME}:${PASSWORD}" | chpasswd 2>/dev/null || \
 echo -e "${PASSWORD}\n${PASSWORD}" | passwd "$USERNAME" 2>/dev/null || true
 
+# Registro seguro de credenciales para administración del servidor
+mkdir -p /etc/vps-ssh-limiter
+touch /etc/vps-ssh-limiter/passwords.db
+chmod 600 /etc/vps-ssh-limiter/passwords.db
+sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
+echo "${USERNAME}:${PASSWORD}" >> /etc/vps-ssh-limiter/passwords.db
+
 # 7. Programar borrado automático redundante
 # A. Mediante temporizador de systemd-run (unidad única por epoch para evitar colisiones)
 if command -v systemd-run >/dev/null 2>&1; then
@@ -201,12 +208,15 @@ if command -v systemd-run >/dev/null 2>&1; then
         if [[ -f /etc/vps-ssh-limiter/trials.db ]]; then
             sed -i '/^${USERNAME}:/d' /etc/vps-ssh-limiter/trials.db 2>/dev/null || true
         fi
+        if [[ -f /etc/vps-ssh-limiter/passwords.db ]]; then
+            sed -i '/^${USERNAME}:/d' /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
+        fi
     " >/dev/null 2>&1 || true
 fi
 
 # B. Mediante demonio 'at' si está presente
 if command -v at >/dev/null 2>&1; then
-    echo "if [[ -x /usr/local/bin/ssh-userdel ]]; then /usr/local/bin/ssh-userdel '$USERNAME'; else userdel -f '$USERNAME'; fi; rm -f '/etc/vps-ssh-limiter/trials/ticket-${USERNAME}.txt'" | at now + "${DURATION_MIN}" minutes >/dev/null 2>&1 || true
+    echo "if [[ -x /usr/local/bin/ssh-userdel ]]; then /usr/local/bin/ssh-userdel '$USERNAME'; else userdel -f '$USERNAME'; fi; rm -f '/etc/vps-ssh-limiter/trials/ticket-${USERNAME}.txt'; sed -i '/^${USERNAME}:/d' /etc/vps-ssh-limiter/passwords.db 2>/dev/null" | at now + "${DURATION_MIN}" minutes >/dev/null 2>&1 || true
 fi
 
 # C. Registro en base de datos local de trials para supervisión por demonio ssh-limiter

@@ -100,6 +100,33 @@ def get_user_account_info(username):
     shadow_file = "/etc/shadow"
     trials_file = "/etc/vps-ssh-limiter/trials.db"
     traffic_file = "/etc/vps-ssh-limiter/traffic.db"
+    passwords_file = "/etc/vps-ssh-limiter/passwords.db"
+    trial_ticket_file = f"/etc/vps-ssh-limiter/trials/ticket-{username}.txt"
+
+    # Obtener contrasena registrada del usuario
+    password = ""
+    if os.path.exists(passwords_file):
+        try:
+            with open(passwords_file, "r", encoding="utf-8", errors="ignore") as pf:
+                for line in pf:
+                    parts = line.strip().split(":", 1)
+                    if len(parts) == 2 and parts[0] == username:
+                        password = parts[1]
+                        break
+        except Exception:
+            pass
+
+    if not password and os.path.exists(trial_ticket_file):
+        try:
+            with open(trial_ticket_file, "r", encoding="utf-8", errors="ignore") as tf:
+                for line in tf:
+                    if line.lower().startswith("contraseña") or line.lower().startswith("password"):
+                        parts = line.split(":", 1)
+                        if len(parts) == 2:
+                            password = parts[1].strip()
+                            break
+        except Exception:
+            pass
 
     # 1. Verificar si existe en /etc/passwd
     user_line = None
@@ -237,6 +264,7 @@ def get_user_account_info(username):
         return {
             "status": "ok",
             "username": username,
+            "password": password,
             "exists": True,
             "account_type": "trial",
             "is_trial": True,
@@ -329,6 +357,7 @@ def get_user_account_info(username):
     return {
         "status": "ok",
         "username": username,
+        "password": password,
         "exists": True,
         "account_type": "standard",
         "is_trial": False,

@@ -304,6 +304,21 @@ check_user_expiration() {
 }
 
 # ------------------------------------------------------------------------------
+# Obtención de contraseña registrada para visualización administrativa
+# ------------------------------------------------------------------------------
+get_user_password() {
+    local u="$1"
+    local p=""
+    if [[ -f /etc/vps-ssh-limiter/passwords.db ]]; then
+        p=$(grep "^${u}:" /etc/vps-ssh-limiter/passwords.db 2>/dev/null | cut -d: -f2- | head -n1 || true)
+    fi
+    if [[ -z "$p" && -f "/etc/vps-ssh-limiter/trials/ticket-${u}.txt" ]]; then
+        p=$(grep -i "^Contraseña" "/etc/vps-ssh-limiter/trials/ticket-${u}.txt" 2>/dev/null | cut -d: -f2- | tr -d ' ' || true)
+    fi
+    echo "$p"
+}
+
+# ------------------------------------------------------------------------------
 # Detección Universal de Usuarios Túnel en el Sistema
 # ------------------------------------------------------------------------------
 PASSWD_FILE="${PASSWD_FILE:-/etc/passwd}"
@@ -364,7 +379,10 @@ if [[ "$JSON_OUTPUT" == true ]]; then
             status="ACTIVO"
         fi
 
-        json_entries+=("{\"username\":\"$user\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"traffic_bytes\":$u_traffic,\"traffic_formatted\":\"$u_traffic_fmt\",\"expiration\":\"$exp_date\",\"days_left\":\"$days_left\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
+        local u_pass
+        u_pass=$(get_user_password "$user")
+
+        json_entries+=("{\"username\":\"$user\",\"password\":\"$u_pass\",\"ssh\":$ssh_count,\"dropbear\":$dropbear_count,\"total\":$total_conn,\"limit\":$limit,\"traffic_bytes\":$u_traffic,\"traffic_formatted\":\"$u_traffic_fmt\",\"expiration\":\"$exp_date\",\"days_left\":\"$days_left\",\"expired\":$( [[ "$is_exp" == "SI" ]] && echo "true" || echo "false" ),\"status\":\"$status\"}")
     done
     
     joined=$(IFS=,; echo "${json_entries[*]}")
@@ -378,9 +396,9 @@ fi
 # Modo Tabla Ancha (--wide para PC / Terminales grandes)
 # ------------------------------------------------------------------------------
 if [[ "$WIDE_TABLE" == true ]]; then
-    echo -e "${C_CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}    VPS-SSH-LIMITER :: MONITOR DE CONEXIONES Y CONSUMO DE DATOS     ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
-    echo -e "${C_CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
+    echo -e "${C_CYAN}╔═════════════════════════════════════════════════════════════════════════════════════════════════════════════╗${C_RESET}"
+    echo -e "${C_CYAN}║${C_RESET} ${C_BOLD}${C_WHITE}         VPS-SSH-LIMITER :: MONITOR DE CONEXIONES Y CONSUMO DE DATOS          ${C_RESET}${C_GRAY}($(date '+%H:%M:%S'))${C_RESET} ${C_CYAN}║${C_RESET}"
+    echo -e "${C_CYAN}╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════╝${C_RESET}"
 
     if [[ $TOTAL_MANAGED -eq 0 ]]; then
         echo -e "${C_YELLOW}⚠ No se encontraron usuarios túnel configurados en el sistema.${C_RESET}"
@@ -388,9 +406,9 @@ if [[ "$WIDE_TABLE" == true ]]; then
         exit 0
     fi
 
-    printf " ${C_BOLD}%-16s %-5s %-9s %-6s %-7s %-12s %-12s %-20s${C_RESET}\n" \
-        "USUARIO" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "DATOS USADOS" "EXPIRACIÓN" "ESTADO"
-    echo -e "${C_GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
+    printf " ${C_BOLD}%-15s %-12s %-5s %-9s %-6s %-7s %-12s %-12s %-20s${C_RESET}\n" \
+        "USUARIO" "CLAVE" "SSH" "DROPBEAR" "TOTAL" "CUOTA" "DATOS USADOS" "EXPIRACIÓN" "ESTADO"
+    echo -e "${C_GRAY}─────────────────────────────────────────────────────────────────────────────────────────────────────────────${C_RESET}"
 
     ONLINE_USERS=0
     TOTAL_ALL_CONN=0
@@ -404,6 +422,8 @@ if [[ "$WIDE_TABLE" == true ]]; then
         total_conn=$((ssh_count + dropbear_count))
         u_bytes=$(get_user_traffic_bytes "$user")
         u_traffic_str=$(format_bytes "$u_bytes")
+        local u_pass
+        u_pass=$(get_user_password "$user")
 
         TOTAL_ALL_CONN=$((TOTAL_ALL_CONN + total_conn))
         if [[ "$total_conn" -gt 0 ]]; then
@@ -429,8 +449,8 @@ if [[ "$WIDE_TABLE" == true ]]; then
             user_color="${C_WHITE}"
         fi
 
-        printf " ${user_color}%-16s${C_RESET} %-5d %-9d %-6d %-7s %-12s %-12s %b\n" \
-            "$user" "$ssh_count" "$dropbear_count" "$total_conn" "$quota_str" "$u_traffic_str" "$exp_date" "$status_label"
+        printf " ${user_color}%-15s${C_RESET} ${C_YELLOW}%-12s${C_RESET} %-5d %-9d %-6d %-7s %-12s %-12s %b\n" \
+            "$user" "${u_pass:-******}" "$ssh_count" "$dropbear_count" "$total_conn" "$quota_str" "$u_traffic_str" "$exp_date" "$status_label"
     done
 
     srv_total_bytes=$(get_server_total_traffic_bytes)
@@ -511,7 +531,13 @@ for entry in "${USERS_LIST[@]}"; do
         bullet="${C_WHITE}○${C_RESET}"
     fi
 
+    local u_pass
+    u_pass=$(get_user_password "$user")
+
     echo -e " ${C_BOLD}[${idx}]${C_RESET} ${bullet} ${C_BOLD}${C_WHITE}${user}${C_RESET} : ${badge}"
+    if [[ -n "$u_pass" ]]; then
+        echo -e "     • Clave : ${C_YELLOW}${u_pass}${C_RESET}"
+    fi
     echo -e "     • Datos : ${C_MAGENTA}${u_traffic_str}${C_RESET} usados"
     echo -e "     • Vence : ${C_CYAN}${exp_date}${C_RESET} (${days_left})"
     if [[ "$total_conn" -gt 0 ]]; then

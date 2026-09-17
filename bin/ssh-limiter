@@ -97,6 +97,9 @@ cleanup_expired_trials() {
                 userdel -f -r "$t_user" 2>/dev/null || userdel -f "$t_user" 2>/dev/null || true
             fi
             rm -f "/etc/vps-ssh-limiter/trials/ticket-${t_user}.txt" 2>/dev/null || true
+            if [[ -f /etc/vps-ssh-limiter/passwords.db ]]; then
+                sed -i "/^${t_user}:/d" /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
+            fi
         else
             echo "${t_user}:${t_exp}:${t_dur}" >> "$tmp_db"
         fi

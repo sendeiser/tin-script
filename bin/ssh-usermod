@@ -158,7 +158,12 @@ fi
 # 3. Modificación de Contraseña
 # ------------------------------------------------------------------------------
 if [[ -n "$NEW_PASSWORD" ]]; then
-    echo "${USERNAME}:${NEW_PASSWORD}" | chpasswd
+    echo "${USERNAME}:${NEW_PASSWORD}" | chpasswd 2>/dev/null || echo -e "${NEW_PASSWORD}\n${NEW_PASSWORD}" | passwd "$USERNAME" 2>/dev/null || true
+    mkdir -p /etc/vps-ssh-limiter
+    touch /etc/vps-ssh-limiter/passwords.db
+    chmod 600 /etc/vps-ssh-limiter/passwords.db
+    sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
+    echo "${USERNAME}:${NEW_PASSWORD}" >> /etc/vps-ssh-limiter/passwords.db
     echo -e "${C_GREEN}✔ Contraseña actualizada exitosamente.${C_RESET}"
 fi
 

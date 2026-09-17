@@ -55,10 +55,10 @@ sudo menu
 ```
 *(También puedes usar los atajos `sudo tin` o `sudo vps`)*
 
-### Vista Previa del Dashboard (v2.2.5 - Minimalista Móvil):
+### Vista Previa del Dashboard (v2.2.9 - Minimalista Móvil):
 ```text
  ╭───────────────────────────────────────────────────────────╮
- │  ⚡ TIN SCRIPTS • VPS MANAGER             v2.2.5 [ONLINE]  │
+ │  ⚡ TIN SCRIPTS • VPS MANAGER             v2.2.9 [ONLINE]  │
  ├─────────────────────────────┬─────────────────────────────┤
  │ OS     : Ubuntu 22.04 LTS   │ IP     : 157.245.62.32      │
  │ Host   : tu-dominio.com     │ Uptime : 5d 12h 30m         │

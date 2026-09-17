@@ -196,7 +196,15 @@ print(json.dumps(data))
         return 1
     fi
 
-    local days_left is_trial min_left exp_date exp_formatted limit act_conns st_text traf_human
+    local days_left is_trial min_left exp_date exp_formatted limit act_conns st_text traf_human u_password
+    u_password=$(python3 -c "import json; d=json.loads('''$json_res'''); print(d.get('password', ''))" 2>/dev/null || echo "")
+    if [[ -z "$u_password" && -f /etc/vps-ssh-limiter/passwords.db ]]; then
+        u_password=$(grep "^${u}:" /etc/vps-ssh-limiter/passwords.db 2>/dev/null | cut -d: -f2- | head -n1 || true)
+    fi
+    if [[ -z "$u_password" && -f "/etc/vps-ssh-limiter/trials/ticket-${u}.txt" ]]; then
+        u_password=$(grep -i "^Contraseña" "/etc/vps-ssh-limiter/trials/ticket-${u}.txt" 2>/dev/null | cut -d: -f2- | tr -d ' ' || true)
+    fi
+
     days_left=$(python3 -c "import json; d=json.loads('''$json_res'''); print(d.get('days_left', -1))" 2>/dev/null || echo "-1")
     is_trial=$(python3 -c "import json; d=json.loads('''$json_res'''); print('true' if d.get('is_trial') else 'false')" 2>/dev/null || echo "false")
     min_left=$(python3 -c "import json; d=json.loads('''$json_res'''); print(d.get('minutes_left', 0))" 2>/dev/null || echo "0")
@@ -224,6 +232,7 @@ print(json.dumps(data))
     echo -e " ${C_BORDER}│${C_RESET}     ${C_BOLD}${C_WHITE}★ FICHA DE CONSULTA API • CUENTA DE USUARIO ★${C_RESET}        ${C_BORDER}│${C_RESET}"
     echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
     printf " ${C_BORDER}│${C_RESET}  %-24s : %b%-30s%b ${C_BORDER}│${C_RESET}\n" "Usuario" "$C_VAL" "$u" "$C_RESET"
+    printf " ${C_BORDER}│${C_RESET}  %-24s : %b%-30s%b ${C_BORDER}│${C_RESET}\n" "Contraseña" "$C_NUM" "${u_password:-[No registrada]}" "$C_RESET"
     printf " ${C_BORDER}│${C_RESET}  %-24s : %b%-30s%b ${C_BORDER}│${C_RESET}\n" "Estado" "$badge_color" "$badge_text" "$C_RESET"
 
     if [[ "$is_trial" == "true" ]]; then

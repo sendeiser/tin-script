@@ -101,6 +101,9 @@ userdel -f -r "$USERNAME" 2>/dev/null || userdel -f "$USERNAME"
 if [[ -f /etc/vps-ssh-limiter/trials.db ]]; then
     sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/trials.db 2>/dev/null || true
 fi
+if [[ -f /etc/vps-ssh-limiter/passwords.db ]]; then
+    sed -i "/^${USERNAME}:/d" /etc/vps-ssh-limiter/passwords.db 2>/dev/null || true
+fi
 rm -f "/etc/vps-ssh-limiter/trials/ticket-${USERNAME}.txt" 2>/dev/null || true
 
 echo -e "\n${C_CYAN}╔═══════════════════════════════════════╗${C_RESET}"
