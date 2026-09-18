@@ -184,19 +184,20 @@ def get_user_account_info(username):
                         # En OpenSSH cada sesion tiene un helper [net] de separacion de privilegios; ignorarlo para no contar doble
                         if "[net]" in cmdline or "[priv]" in cmdline:
                             continue
-                        # Verificar si su proceso padre (PPID) tambien es sshd (subproceso hijo de la misma sesion)
+                        active_connections += 1
+                    elif "dropbear" in comm:
+                        active_connections += 1
+                    elif "ssh-tunnel" in comm:
+                        # Si corre ssh-tunnel-shell bajo el usuario, verificar si su proceso padre es dropbear
                         try:
                             with open(f"/proc/{pid}/stat", "r") as sf:
                                 ppid = sf.read().split()[3]
                             if os.path.exists(f"/proc/{ppid}/comm"):
                                 with open(f"/proc/{ppid}/comm", "r") as pcf:
-                                    if "sshd" in pcf.read():
-                                        continue
+                                    if "dropbear" in pcf.read():
+                                        active_connections += 1
                         except Exception:
                             pass
-                        active_connections += 1
-                    elif "dropbear" in comm:
-                        active_connections += 1
     except Exception:
         pass
 

@@ -205,7 +205,7 @@ get_user_stats() {
     now_epoch=$(date +%s)
 
     local -A active_users=()
-    for p in $(pgrep -f "dropbear|sshd" 2>/dev/null || true); do
+    for p in $(pgrep -f "dropbear|sshd|ssh-tunnel" 2>/dev/null || true); do
         [[ -d "/proc/$p" ]] || continue
         local p_uid
         p_uid=$(awk '/^Uid:/ {print $2}' "/proc/$p/status" 2>/dev/null || true)
@@ -333,7 +333,7 @@ draw_dashboard() {
     local traffic_txt
     traffic_txt=$(get_traffic_stats)
 
-    local current_ver="2.2.10"
+    local current_ver="2.2.11"
     if [[ -f /etc/vps-ssh-limiter/version ]]; then
         current_ver=$(tr -d '[:space:]' < /etc/vps-ssh-limiter/version)
     fi
@@ -448,8 +448,58 @@ select_tunnel_user() {
         return 1
     fi
 
+    # Detección en vivo de conexiones activas por usuario para visualización instantánea
+    local -A user_conns=()
+    local total_online_users=0
+    for p in $(pgrep -f "dropbear|sshd|ssh-tunnel" 2>/dev/null || true); do
+        [[ -d "/proc/$p" ]] || continue
+        local p_uid
+        p_uid=$(awk '/^Uid:/ {print $2}' "/proc/$p/status" 2>/dev/null || true)
+        if [[ -n "$p_uid" && "$p_uid" -ge 1000 ]]; then
+            local u_name
+            u_name=$(id -nu "$p_uid" 2>/dev/null || true)
+            if [[ -n "$u_name" ]]; then
+                local cmdline=""
+                [[ -r "/proc/$p/cmdline" ]] && cmdline=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null || true)
+                if [[ "$cmdline" != *"[net]"* && "$cmdline" != *"[priv]"* ]]; then
+                    user_conns["$u_name"]=$(( ${user_conns["$u_name"]:-0} + 1 ))
+                fi
+            fi
+        fi
+    done
+
+    local db_pids=($(pgrep -x dropbear 2>/dev/null || true))
+    if [[ ${#db_pids[@]} -gt 0 ]]; then
+        local logs=""
+        if command -v journalctl >/dev/null 2>&1; then
+            logs=$(journalctl -u dropbear -n 300 --no-pager 2>/dev/null || true)
+        fi
+        if [[ -f /var/log/auth.log ]]; then
+            local al
+            al=$(tail -n 300 /var/log/auth.log 2>/dev/null | grep -i "dropbear" || true)
+            logs="${logs}"$'\n'"${al}"
+        fi
+        while read -r line; do
+            if [[ "$line" =~ dropbear\[([0-9]+)\]:.*auth\ succeeded\ for\ \'([^\']+)\' ]]; then
+                local pid="${BASH_REMATCH[1]}"
+                local user="${BASH_REMATCH[2]}"
+                if [[ -d "/proc/$pid" && "${user_conns["$user"]:-0}" -eq 0 ]]; then
+                    user_conns["$user"]=1
+                fi
+            fi
+        done <<< "$logs"
+    fi
+
+    for u in "${u_list[@]}"; do
+        if [[ "${user_conns["$u"]:-0}" -gt 0 ]]; then
+            ((total_online_users++))
+        fi
+    done
+
+    local title_header="${action_title:0:36}"
+    local stats_tag="(${total_online_users} On / ${#u_list[@]} Tot)"
     echo -e "\n ${C_BORDER}╭───────────────────────────────────────────────────────────╮${C_RESET}"
-    printf " ${C_BORDER}│${C_RESET}  %b%b%-55s%b  ${C_BORDER}│${C_RESET}\n" "$C_TITLE" "$C_BOLD" "$action_title" "$C_RESET"
+    printf " ${C_BORDER}│${C_RESET}  %b%b%-36s%b %b%19s%b ${C_BORDER}│${C_RESET}\n" "$C_TITLE" "$C_BOLD" "$title_header" "$C_RESET" "$C_LABEL" "$stats_tag" "$C_RESET"
     echo -e " ${C_BORDER}├───────────────────────────────────────────────────────────┤${C_RESET}"
 
     local now_epoch
@@ -480,14 +530,23 @@ select_tunnel_user() {
             fi
         fi
 
-        local badge_col="$C_ON"
-        local badge_txt="[ACTIVO]   "
+        local conns="${user_conns["$u"]:-0}"
+        local badge_col="$C_OFF"
+        local badge_txt="○ OFFLINE  "
         if [[ "$st" == "BLOQUEADO" ]]; then
             badge_col="$C_RED"
             badge_txt="[BLOQUEADO]"
         elif [[ "$st" == "EXPIRADO" ]]; then
             badge_col="$C_OFF"
             badge_txt="[EXPIRADO] "
+        elif [[ "$conns" -gt 0 ]]; then
+            badge_col="$C_ON"
+            badge_txt="● ONLINE   "
+            if [[ "$inf" == "Sin expiración" ]]; then
+                inf="${conns} con • Activo"
+            else
+                inf="${conns} con • ${inf}"
+            fi
         fi
 
         printf " ${C_BORDER}│${C_RESET}  %b[%02d]%b %b%-18s%b %b%-11s%b %b%-20s%b ${C_BORDER}│${C_RESET}\n" \
@@ -656,7 +715,7 @@ menu_users() {
                     for p in $(pgrep -u "$u_name" 2>/dev/null || true); do
                         local comm=""
                         [[ -r "/proc/$p/comm" ]] && comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
-                        if [[ "$comm" == *"sshd"* || "$comm" == *"dropbear"* ]]; then
+                        if [[ "$comm" == *"sshd"* || "$comm" == *"dropbear"* || "$comm" == *"ssh-tunnel"* ]]; then
                             user_pids+=("$p")
                         fi
                     done

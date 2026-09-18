@@ -214,21 +214,12 @@ load_all_user_connections() {
             # Solo contabilizar procesos de conexión SSH reales (OpenSSH sshd o Dropbear)
             # Ignorar shells (ssh-tunnel-shell, bash), systemd (--user), sd-pam, etc.
             if [[ "$comm" == *"sshd"* ]]; then
-                # En OpenSSH ignorar helpers [net] y [priv] para no contabilizar doble por conexion
+                # En OpenSSH cada conexión autenticada crea un proceso unpriv para el usuario (ej: sshd: usuario@notty)
+                # Ignorar [net] y [priv] para contabilizar exactamente 1 proceso por conexion real
                 local cmdline=""
                 [[ -r "/proc/$p/cmdline" ]] && cmdline=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null || true)
                 if [[ "$cmdline" == *"[net]"* || "$cmdline" == *"[priv]"* ]]; then
                     continue
-                fi
-                # Si el proceso padre (PPID) tambien es sshd, es el subproceso hijo de la misma sesion: no contar doble
-                local ppid
-                ppid=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null || echo 0)
-                if [[ -n "$ppid" && "$ppid" -gt 1 && -d "/proc/$ppid" ]]; then
-                    local pcomm
-                    pcomm=$(cat "/proc/$ppid/comm" 2>/dev/null || true)
-                    if [[ "$pcomm" == *"sshd"* ]]; then
-                        continue
-                    fi
                 fi
                 local cur="${USER_ACTIVE_PIDS["$u"]:-}"
                 if [[ ! " $cur " =~ " $p " ]]; then
@@ -238,6 +229,20 @@ load_all_user_connections() {
                 local cur="${USER_ACTIVE_PIDS["$u"]:-}"
                 if [[ ! " $cur " =~ " $p " ]]; then
                     USER_ACTIVE_PIDS["$u"]="${cur} $p"
+                fi
+            elif [[ "$comm" == *"ssh-tunnel"* ]]; then
+                # Shell de túnel restringido: verificar si su proceso padre es dropbear
+                local ppid
+                ppid=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null || echo 0)
+                if [[ -n "$ppid" && "$ppid" -gt 1 && -d "/proc/$ppid" ]]; then
+                    local pcomm
+                    pcomm=$(cat "/proc/$ppid/comm" 2>/dev/null || true)
+                    if [[ "$pcomm" == *"dropbear"* ]]; then
+                        local cur="${USER_ACTIVE_PIDS["$u"]:-}"
+                        if [[ ! " $cur " =~ " $ppid " && ! " $cur " =~ " $p " ]]; then
+                            USER_ACTIVE_PIDS["$u"]="${cur} $ppid"
+                        fi
+                    fi
                 fi
             fi
         done
