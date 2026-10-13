@@ -230,7 +230,7 @@ show_payloads() {
     echo -e "${C_CYAN}► Cómo funciona:${C_RESET}"
     echo -e "  • ${C_BOLD}bughost.com:${C_RESET} Dominio zero-rated de tu operadora (ej: ${C_YELLOW}rexo.personal.com.ar${C_RESET} para Personal Argentina)."
     echo -e "  • ${C_BOLD}tudominio.com:${C_RESET} Tu subdominio en Cloudflare con Proxy (Nube Naranja) hacia tu VPS."
-    echo -e "  • ${C_BOLD}Server IP / Host en la App:${C_RESET} Dominio CDN de Cloudflare con puerto ${C_BOLD}:80${C_RESET} (ej: ${C_YELLOW}woocommerce.everlytic.net:80${C_RESET})."
+    echo -e "  • ${C_BOLD}Server IP / Host en la App:${C_RESET} Dominio CDN de Cloudflare con puerto ${C_BOLD}:80${C_RESET} (ej: ${C_YELLOW}104.16.51.51:80${C_RESET} o tu subdominio)."
     echo -e "  • ${C_BOLD}En tu VPS:${C_RESET} El demonio ${C_BOLD}ssh-wsproxy${C_RESET} atiende en el puerto 80 y reenvía el tráfico a OpenSSH (con banners personalizados por usuario).\n"
 
     echo -e "${C_BOLD}2. WebSocket Estándar (Cloudflare / Direct):${C_RESET}"
@@ -301,26 +301,26 @@ wizard_websocket_cdn() {
 
     # Paso 3: Host de Conexión Fronting / CDN (Server IP/Host en HTTP Custom)
     echo -e "${C_BOLD}► PASO 3: Host de Conexión CDN (Server IP/Host en HTTP Custom):${C_RESET}"
-    echo -e "  [1] Usar ${C_GREEN}woocommerce.everlytic.net${C_RESET} (Dominio CDN Cloudflare probado)"
-    echo -e "  [2] Usar ${C_GREEN}caching.ovh${C_RESET} (CDN Cloudflare)"
-    echo -e "  [3] Usar IP Anycast de Cloudflare (${C_GREEN}104.16.51.51${C_RESET})"
-    echo -e "  [4] Usar tu propio dominio (${C_GREEN}${vps_domain}${C_RESET})"
+    echo -e "  [1] Usar tu propio dominio Cloudflare (${C_GREEN}${vps_domain}${C_RESET}) [Recomendado]"
+    echo -e "  [2] Usar IP Anycast Cloudflare (${C_GREEN}104.16.51.51${C_RESET})"
+    echo -e "  [3] Usar IP Anycast Cloudflare (${C_GREEN}104.19.241.93${C_RESET})"
+    echo -e "  [4] Usar IP Anycast Cloudflare (${C_GREEN}172.67.182.111${C_RESET})"
     echo -e "  [5] Ingresar otro host CDN personalizado"
     local opt_cdn="" cdn_host=""
     read -r -p "Opción [1-5, defecto 1]: " opt_cdn || true
     case "${opt_cdn:-1}" in
-        1) cdn_host="woocommerce.everlytic.net" ;;
-        2) cdn_host="caching.ovh" ;;
-        3) cdn_host="104.16.51.51" ;;
-        4) cdn_host="$vps_domain" ;;
+        1) cdn_host="$vps_domain" ;;
+        2) cdn_host="104.16.51.51" ;;
+        3) cdn_host="104.19.241.93" ;;
+        4) cdn_host="172.67.182.111" ;;
         5)
             read -r -p "Introduce el host CDN: " cdn_host || true
             cdn_host=$(echo "$cdn_host" | tr -d '[:space:]')
             if [[ -z "$cdn_host" ]]; then
-                cdn_host="woocommerce.everlytic.net"
+                cdn_host="$vps_domain"
             fi
             ;;
-        *) cdn_host="woocommerce.everlytic.net" ;;
+        *) cdn_host="$vps_domain" ;;
     esac
     echo -e "✔ Host de Conexión: ${C_GREEN}${C_BOLD}${cdn_host}${C_RESET}\n"
 

@@ -133,7 +133,7 @@ El servicio **`ssh-wsproxy`** escucha en el **puerto 80**:
        ▼ (1) Envía Payload con Bug Host (rexo.personal.com.ar) y Upgrade: websocket
 [Antena / DPI del Operador] ──► Deja pasar el tráfico gratis en puerto 80 (Zero-Rating)
        │
-       ▼ (2) Conecta a Cloudflare CDN (ej: woocommerce.everlytic.net:80)
+       ▼ (2) Conecta a Cloudflare CDN (ej: 104.16.51.51:80 o tu subdominio)
 [Cloudflare Edge Anycast] ──► Lee 'Host: martin.supravps.shop'
        │
        ▼ (3) Reenvía WebSocket hacia la IP de tu VPS en puerto 80
@@ -147,7 +147,7 @@ El servicio **`ssh-wsproxy`** escucha en el **puerto 80**:
 El menú interactivo incluye un generador automático que te guía paso a paso:
 1. Elige tu operadora o escribe tu Bug Host (Personal, Claro, Movistar, WhatsApp).
 2. Detecta tu subdominio configurado en la VPS (`martin.supravps.shop`).
-3. Te sugiere dominios CDN de Cloudflare probados (ej: `woocommerce.everlytic.net`).
+3. Te sugiere dominios o IPs Anycast de Cloudflare probados (ej: `104.16.51.51` o tu propio dominio).
 4. Selecciona tu usuario túnel registrado.
 5. Genera la ficha completa con el Payload listo para copiar y los datos exactos para la app.
 
